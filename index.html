@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <!-- 让手机浏览器默认缩放合适 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分账记账 Hello World</title>
+  <style>
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial;background:#f5f5f5;padding:20px}
+    h1{color:#07c160;text-align:center}
+    .card{background:#fff;border-radius:8px;padding:15px;margin:15px 0;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+    button{width:100%;padding:10px;font-size:18px;border:0;background:#07c160;color:#fff;border-radius:4px}
+  </style>
+</head>
+<body>
+  <h1>Hello, 分账记账</h1>
+
+  <div class="card">
+    <p>总金额：<span id="total">0.00</span> 元</p>
+    <p>人数：<span id="person">0</span></p>
+    <p>每人应付：<span id="avg">0.00</span> 元</p>
+  </div>
+
+  <button
