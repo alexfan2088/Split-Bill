@@ -434,6 +434,37 @@
     #logToggle:hover {
       background: #0056b3;
     }
+    /* 返回按钮样式 */
+    .back-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,.3);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    .back-button:hover {
+      background: #0056b3;
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0,0,0,.4);
+    }
+    .back-button:active {
+      transform: scale(0.95);
+    }
+    .back-button svg {
+      width: 24px;
+      height: 24px;
+    }
   </style>
 </head>
 <body>
@@ -482,7 +513,6 @@
     <div class="card">
       <div class="row">
         <div>
-          <div class="small"><a href="javascript:void(0)" onclick="backToHome()">← 返回</a></div>
           <h3 id="activityTitle">活动名称</h3>
           <div class="small" id="activityMeta"></div>
         </div>
@@ -514,6 +544,13 @@
       </div>
     </div>
   </div>
+
+  <!-- 全局返回按钮 -->
+  <button id="backButton" class="back-button" onclick="handleBack()" style="display: none;">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
 
 </div>
 
@@ -1363,6 +1400,7 @@
           // 隐藏登录界面，显示活动列表页面
           document.getElementById('userCard').style.display = 'none';
           document.getElementById('screenHome').classList.remove('hidden');
+          updateBackButton();
           // 加载活动列表
           if (db) {
             await loadActivities();
@@ -1505,11 +1543,54 @@
     document.getElementById('screenHome').classList.remove('hidden');
     document.getElementById('screenActivity').classList.add('hidden');
     currentActivity = null;
+    updateBackButton();
   }
 
   function openActivityScreen() {
     document.getElementById('screenHome').classList.add('hidden');
     document.getElementById('screenActivity').classList.remove('hidden');
+    updateBackButton();
+  }
+
+  // 更新返回按钮的显示状态
+  function updateBackButton() {
+    const backBtn = document.getElementById('backButton');
+    const screenHome = document.getElementById('screenHome');
+    const screenActivity = document.getElementById('screenActivity');
+    const userCard = document.getElementById('userCard');
+    
+    // 如果活动详情页显示，显示返回按钮
+    if (!screenActivity.classList.contains('hidden')) {
+      backBtn.style.display = 'flex';
+    }
+    // 如果活动列表页显示，显示返回按钮（返回到登录页）
+    else if (!screenHome.classList.contains('hidden')) {
+      backBtn.style.display = 'flex';
+    }
+    // 如果登录页显示，隐藏返回按钮
+    else if (userCard && userCard.style.display !== 'none') {
+      backBtn.style.display = 'none';
+    }
+    else {
+      backBtn.style.display = 'none';
+    }
+  }
+
+  // 处理返回按钮点击
+  function handleBack() {
+    const screenHome = document.getElementById('screenHome');
+    const screenActivity = document.getElementById('screenActivity');
+    
+    // 如果活动详情页显示，返回到活动列表
+    if (!screenActivity.classList.contains('hidden')) {
+      backToHome();
+    }
+    // 如果活动列表页显示，返回到登录页
+    else if (!screenHome.classList.contains('hidden')) {
+      document.getElementById('screenHome').classList.add('hidden');
+      document.getElementById('userCard').style.display = 'block';
+      updateBackButton();
+    }
   }
 
   // ====== Modal 控制 ======
@@ -2340,9 +2421,18 @@
         const displayedSurnames = surnames.slice(0, maxDisplay);
         const remainingCount = surnames.length > maxDisplay ? surnames.slice(maxDisplay).reduce((sum, s) => sum + surnameMap[s], 0) : 0;
         
-        // 生成姓氏圆（挤一挤，放在一行）
-        const surnameCircles = displayedSurnames.map(surname => {
-          const color = getSurnameColor(surname);
+        // 生成姓氏圆（重叠20%）
+        const surnameCircles = displayedSurnames.map((surname, index) => {
+          // 检查这个姓氏对应的所有成员中是否有付款人
+          const hasPayer = Object.keys(b.participants).some(name => 
+            getSurname(name) === surname && b.participants[name] > 0 && b.payer === name
+          );
+          // 如果有付款人，用蓝色；否则用土黄色
+          const color = hasPayer ? '#007bff' : '#D4A574'; // 蓝色或土黄色
+          
+          // 第一个圆不重叠，后续圆重叠20%（32px * 0.2 ≈ 6.4px，用-6px）
+          const marginLeft = index === 0 ? '0' : '-6px';
+          
           return `
             <span style="
               display: inline-flex;
@@ -2355,7 +2445,11 @@
               color: white;
               font-weight: bold;
               font-size: 14px;
-              margin-right: 2px;
+              margin-left: ${marginLeft};
+              border: 2px solid white;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+              position: relative;
+              z-index: ${10 - index};
               flex-shrink: 0;
             ">${surname}</span>
           `;
@@ -2433,6 +2527,33 @@
       `;
       div.appendChild(row);
     });
+    
+    // 在页面下方显示建议付款人员（余额最大的成员）
+    if (Object.keys(currentActivityBalances).length > 0) {
+      // 找出余额最大的成员
+      let maxBalanceMember = null;
+      let maxBalance = -Infinity;
+      
+      Object.keys(currentActivityBalances).forEach(name => {
+        const bal = currentActivityBalances[name];
+        if (bal.balance > maxBalance) {
+          maxBalance = bal.balance;
+          maxBalanceMember = name;
+        }
+      });
+      
+      // 如果找到了余额最大的成员，显示建议
+      if (maxBalanceMember) {
+        const suggestionDiv = document.createElement('div');
+        suggestionDiv.style.cssText = 'margin-top: 16px; padding-top: 16px; border-top: 1px solid #e0e0e0; text-align: center;';
+        suggestionDiv.innerHTML = `
+          <div style="color: #007bff; font-size: 14px; font-weight: 500;">
+            下一次活动建议付款人员：${maxBalanceMember}
+          </div>
+        `;
+        div.appendChild(suggestionDiv);
+      }
+    }
   }
 
   // ====== 结算 TAB 渲染 ======
