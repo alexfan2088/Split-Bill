@@ -1086,7 +1086,7 @@
   // 现在改为用户点击按钮后才登录
   
   // 处理登录/注册
-  async function handleLoginOrRegister() {
+  window.handleLoginOrRegister = async function handleLoginOrRegister() {
     const userName = document.getElementById('inputUserName').value.trim();
     const passwordInput = document.getElementById('inputPassword');
     const password = passwordInput.value;
@@ -1661,6 +1661,10 @@
   
   // 添加参与人输入行
   function addBillParticipantRow(container, name = '', weight = 2) {
+    // 确保权重是数字类型
+    const weightNum = typeof weight === 'number' ? weight : Number(weight || 0);
+    console.log(`addBillParticipantRow - name: ${name}, weight参数: ${weight}, weightNum: ${weightNum}, 类型: ${typeof weightNum}`);
+    
     const row = document.createElement('div');
     row.className = 'row';
     row.style.marginBottom = '8px';
@@ -1687,6 +1691,8 @@
     // 使用时间戳确保每个参与人行的单选框组是唯一的
     const uniqueId = 'weight_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     
+    let checkedCount = 0; // 用于调试，记录有多少个单选框被选中
+    
     [0, 1, 2, 3].forEach(w => {
       const radioGroup = document.createElement('div');
       radioGroup.style.display = 'flex';
@@ -1696,9 +1702,15 @@
       const radio = document.createElement('input');
       radio.type = 'radio';
       radio.name = uniqueId; // 使用唯一名称，确保同一行的单选框是一组
-      radio.value = w;
+      radio.value = String(w);
       radio.id = uniqueId + '_' + w;
-      if (w === weight) radio.checked = true;
+      
+      // 确保权重是数字类型进行比较
+      if (w === weightNum) {
+        radio.checked = true;
+        checkedCount++;
+        console.log(`设置权重 ${w} 为选中状态，name: ${name}, weightNum: ${weightNum}`);
+      }
       
       const label = document.createElement('label');
       label.htmlFor = radio.id;
@@ -2449,31 +2461,161 @@
   }
 
   // ====== 编辑费用 ======
-  function editBill(billDoc) {
-    // 如果传入的是字符串（JSON），需要解析
+  async function editBill(billDoc) {
+    // 提取费用ID（支持字符串或对象）
+    let billId = null;
     if (typeof billDoc === 'string') {
+      // 如果是字符串，尝试解析JSON或直接作为ID
       try {
-        billDoc = JSON.parse(billDoc.replace(/&quot;/g, '"'));
+        const parsed = JSON.parse(billDoc.replace(/&quot;/g, '"'));
+        billId = parsed._id || parsed.id || billDoc;
       } catch (e) {
-        console.error('解析费用数据失败:', e);
+        // 如果解析失败，可能是直接的ID字符串
+        billId = billDoc;
+      }
+    } else if (billDoc && billDoc._id) {
+      billId = billDoc._id;
+    }
+    
+    if (!billId) {
+      appLog('编辑费用失败：无法获取费用ID', 'error');
+      showGlobalMessage('无法获取费用ID', 'error');
+      return;
+    }
+    
+    if (!currentActivity || !db) {
+      showGlobalMessage('数据未初始化', 'error');
+      return;
+    }
+    
+    // 总是从数据库重新加载最新数据，避免JSON序列化/反序列化导致的数据不一致问题
+    appLog('从数据库重新加载费用数据，ID: ' + billId, 'info');
+    let billData = null;
+    
+    // 先尝试使用传递的数据作为后备
+    if (typeof billDoc === 'object' && billDoc && billDoc._id) {
+      billData = { ...billDoc };
+      appLog('使用传递的数据作为初始数据', 'info');
+    }
+    
+    try {
+      const freshBill = await db.collection('bills').doc(billId).get();
+      appLog('数据库返回的原始数据: ' + JSON.stringify(freshBill), 'info');
+      
+      // 腾讯云开发返回的数据格式：{ data: [文档对象] } 或 { data: 文档对象 }
+      let freshData = null;
+      if (freshBill && freshBill.data) {
+        // freshBill.data 可能是数组或对象
+        if (Array.isArray(freshBill.data)) {
+          // 如果是数组，取第一个元素
+          if (freshBill.data.length > 0) {
+            freshData = freshBill.data[0];
+            appLog('从数组中找到数据，数组长度: ' + freshBill.data.length, 'info');
+          } else {
+            appLog('数据数组为空', 'error');
+          }
+        } else {
+          // 如果是对象，直接使用
+          freshData = freshBill.data;
+          appLog('数据是对象格式', 'info');
+        }
+      } else if (freshBill && (freshBill._id || freshBill.amount)) {
+        // 如果数据直接在 freshBill 对象上
+        freshData = freshBill;
+        appLog('数据直接在返回对象上', 'info');
+      }
+      
+      if (freshData) {
+        billData = { _id: billId, ...freshData };
+        appLog('从数据库成功加载数据', 'success');
+        appLog('处理后的billData: ' + JSON.stringify(billData), 'info');
+      } else {
+        appLog('数据库返回的数据格式异常，使用传递的数据', 'warning');
+        if (!billData) {
+          appLog('费用数据不存在，ID: ' + billId, 'error');
+          showGlobalMessage('费用数据不存在', 'error');
+          return;
+        }
+      }
+      
+      appLog('最终使用的费用数据: ' + JSON.stringify(billData), 'info');
+      appLog('费用数据 - amount: ' + billData.amount + ', title: ' + billData.title, 'info');
+      appLog('费用数据 participants: ' + JSON.stringify(billData.participants), 'info');
+    } catch (e) {
+      appLog('从数据库加载数据失败: ' + e.message, 'error');
+      if (!billData) {
+        appLog('无法加载数据且没有后备数据', 'error');
+        showGlobalMessage('加载费用数据失败：' + e.message, 'error');
         return;
       }
+      appLog('使用后备数据继续', 'warning');
     }
-    if (!currentActivity) return;
+    
+    if (!billData || !billData._id) {
+      appLog('费用数据无效', 'error');
+      showGlobalMessage('费用数据无效', 'error');
+      return;
+    }
+    
     const m = document.getElementById('modalBill');
     
     // 填充费用数据
-    document.getElementById('billAmount').value = billDoc.amount || '';
-    document.getElementById('billTitle').value = billDoc.title || '';
-    document.getElementById('billCategory').value = billDoc.category || '';
-    const time = billDoc.time || billDoc.createdAt;
-    if (time) {
-      const d = (time.toDate) ? time.toDate() : new Date(time);
-      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000)
-                      .toISOString().slice(0,16);
-      document.getElementById('billTime').value = local;
+    appLog('开始填充费用数据到表单', 'info');
+    appLog('billData对象: ' + JSON.stringify(billData), 'info');
+    appLog('billData.amount: ' + billData.amount + ' (类型: ' + typeof billData.amount + ')', 'info');
+    appLog('billData.title: ' + billData.title, 'info');
+    appLog('billData.category: ' + billData.category, 'info');
+    appLog('billData.payer: ' + billData.payer, 'info');
+    appLog('billData.participants: ' + JSON.stringify(billData.participants), 'info');
+    
+    const amountInput = document.getElementById('billAmount');
+    const titleInput = document.getElementById('billTitle');
+    const categoryInput = document.getElementById('billCategory');
+    const remarkInput = document.getElementById('billRemark');
+    
+    if (!amountInput) {
+      appLog('错误：找不到 billAmount 输入框', 'error');
+    } else {
+      amountInput.value = billData.amount || '';
+      appLog('已填充金额: ' + amountInput.value, 'info');
     }
-    document.getElementById('billRemark').value = billDoc.remark || '';
+    
+    if (!titleInput) {
+      appLog('错误：找不到 billTitle 输入框', 'error');
+    } else {
+      titleInput.value = billData.title || '';
+      appLog('已填充标题: ' + titleInput.value, 'info');
+    }
+    
+    if (!categoryInput) {
+      appLog('错误：找不到 billCategory 输入框', 'error');
+    } else {
+      categoryInput.value = billData.category || '';
+      appLog('已填充分类: ' + categoryInput.value, 'info');
+    }
+    
+    if (!remarkInput) {
+      appLog('错误：找不到 billRemark 输入框', 'error');
+    } else {
+      remarkInput.value = billData.remark || '';
+      appLog('已填充备注: ' + remarkInput.value, 'info');
+    }
+    
+    const time = billData.time || billData.createdAt;
+    if (time) {
+      const timeInput = document.getElementById('billTime');
+      if (timeInput) {
+        const d = (time.toDate) ? time.toDate() : new Date(time);
+        const local = new Date(d.getTime() - d.getTimezoneOffset()*60000)
+                        .toISOString().slice(0,16);
+        timeInput.value = local;
+        appLog('已填充时间: ' + local, 'info');
+      } else {
+        appLog('错误：找不到 billTime 输入框', 'error');
+      }
+    } else {
+      appLog('警告：没有时间数据', 'warning');
+    }
 
     // 付款人列表
     const payerSelect = document.getElementById('billPayer');
@@ -2482,22 +2624,67 @@
       const opt = document.createElement('option');
       opt.value = mb.name;
       opt.textContent = mb.name;
-      if (mb.name === billDoc.payer) opt.selected = true;
+      if (mb.name === billData.payer) opt.selected = true;
       payerSelect.appendChild(opt);
     });
 
-    // 参与成员
+    // 参与成员 - 加载所有活动成员，对于已在participants中的使用保存的权重，否则默认权重为0
     const container = document.getElementById('billParticipants');
     container.innerHTML = '';
-    if (billDoc.participants) {
-      Object.keys(billDoc.participants).forEach(name => {
-        const weight = billDoc.participants[name];
-        addBillParticipantRow(container, name, weight);
-      });
+    
+    // 从活动的group中加载所有成员
+    let activityMembers = currentActivity.members || [];
+    
+    if (db && currentActivity._id) {
+      try {
+        const groupRes = await db.collection('groups')
+          .where({ activityId: currentActivity._id })
+          .limit(1)
+          .get();
+        
+        if (groupRes.data && groupRes.data.length > 0 && groupRes.data[0].members) {
+          // 从group中加载成员
+          activityMembers = groupRes.data[0].members;
+        }
+      } catch (e) {
+        appLog('加载活动成员失败: ' + e.message, 'error');
+      }
     }
     
+    // 获取已保存的participants（如果存在）
+    // 确保权重值都是数字类型，避免手机端类型不一致的问题
+    const savedParticipants = billData.participants || {};
+    const normalizedParticipants = {};
+    Object.keys(savedParticipants).forEach(name => {
+      // 确保权重值被转换为数字类型
+      const weight = savedParticipants[name];
+      normalizedParticipants[name] = typeof weight === 'number' ? weight : Number(weight || 0);
+    });
+    appLog('编辑费用 - 已保存的participants (原始): ' + JSON.stringify(savedParticipants), 'info');
+    appLog('编辑费用 - 已保存的participants (标准化): ' + JSON.stringify(normalizedParticipants), 'info');
+    
+    // 为所有活动成员创建行，使用保存的权重（如果存在），否则默认权重为0
+    appLog('开始创建参与成员行，活动成员数量: ' + activityMembers.length, 'info');
+    appLog('normalizedParticipants: ' + JSON.stringify(normalizedParticipants), 'info');
+    activityMembers.forEach(mb => {
+      const memberName = typeof mb === 'string' ? mb : mb.name;
+      // 如果该成员在normalizedParticipants中，使用保存的权重；否则默认权重为0
+      let weight = 0;
+      if (normalizedParticipants.hasOwnProperty(memberName)) {
+        weight = normalizedParticipants[memberName];
+        // 再次确保是数字类型
+        weight = typeof weight === 'number' ? weight : Number(weight || 0);
+        appLog(`编辑费用 - 成员 ${memberName} 使用保存的权重: ${weight} (类型: ${typeof weight})`, 'info');
+      } else {
+        appLog(`编辑费用 - 成员 ${memberName} 不在participants中，使用默认权重: 0`, 'info');
+      }
+      appLog(`编辑费用 - 调用 addBillParticipantRow(${memberName}, ${weight})`, 'info');
+      addBillParticipantRow(container, memberName, weight);
+    });
+    appLog('参与成员行创建完成', 'info');
+    
     // 保存费用ID用于更新
-    m.dataset.editId = billDoc._id;
+    m.dataset.editId = billId;
     // 更新按钮和标题文本
     const btn = document.getElementById('saveBillBtn');
     if (btn) btn.textContent = '更新费用';
@@ -2548,25 +2735,67 @@
     const participants = {};
     rows.forEach(row => {
       const nameInput = row.querySelector('input[type="text"]');
+      if (!nameInput) {
+        appLog('跳过：找不到名字输入框', 'warning');
+        return;
+      }
+      
+      const name = nameInput.value.trim();
+      if (!name) {
+        appLog('跳过：名字为空', 'warning');
+        return; // 跳过没有名字的行
+      }
+      
+      // 查找选中的单选框
       const weightRadio = row.querySelector('input[type="radio"]:checked');
-      if (nameInput && weightRadio) {
-        const name = nameInput.value.trim();
-        const weight = Number(weightRadio.value || 0);
-        // 如果名字不为空且权重大于0，则参与
-        if (name && weight > 0) {
-          participants[name] = weight;
+      let weight = 0; // 默认权重为0
+      
+      if (weightRadio) {
+        weight = Number(weightRadio.value || 0);
+        appLog(`保存成员权重 - ${name}: 找到选中的单选框，value=${weightRadio.value}, weight=${weight}`, 'info');
+      } else {
+        // 如果没有选中的单选框，尝试查找所有单选框
+        const allRadios = row.querySelectorAll('input[type="radio"]');
+        appLog(`保存成员权重 - ${name}: 没有找到选中的单选框，共有 ${allRadios.length} 个单选框`, 'warning');
+        
+        if (allRadios.length > 0) {
+          // 列出所有单选框的状态
+          allRadios.forEach((radio, idx) => {
+            appLog(`  单选框 ${idx}: value=${radio.value}, checked=${radio.checked}`, 'info');
+          });
+          
+          // 查找值为0的单选框（默认值）
+          const defaultRadio = Array.from(allRadios).find(r => r.value === '0');
+          if (defaultRadio) {
+            weight = 0;
+            defaultRadio.checked = true; // 确保至少选中一个
+            appLog(`保存成员权重 - ${name}: 设置默认权重0`, 'info');
+          } else {
+            weight = 0; // 如果找不到，默认使用0
+            appLog(`保存成员权重 - ${name}: 使用默认权重0`, 'warning');
+          }
+        } else {
+          appLog(`保存成员权重 - ${name}: 没有找到任何单选框！`, 'error');
         }
       }
+      
+      // 保存所有成员的权重（包括0），以便编辑时能正确显示
+      // 确保权重值是数字类型，避免手机端类型不一致的问题
+      participants[name] = typeof weight === 'number' ? weight : Number(weight || 0);
+      appLog(`保存成员权重: ${name} = ${participants[name]} (类型: ${typeof participants[name]})`, 'info');
     });
-    const names = Object.keys(participants);
-    if (!names.length) {
+    
+    // 检查是否有权重大于0的成员
+    const namesWithWeight = Object.keys(participants).filter(name => participants[name] > 0);
+    if (!namesWithWeight.length) {
       showGlobalMessage('至少添加一个参与成员（权重大于0）', 'error');
       return;
     }
 
-    const totalWeight = names.reduce((s,n)=>s+participants[n],0);
+    // 只计算权重大于0的成员的总权重和分摊
+    const totalWeight = namesWithWeight.reduce((s,n)=>s+participants[n],0);
     const splitDetail = {};
-    names.forEach(n=>{
+    namesWithWeight.forEach(n=>{
       const share = amount * participants[n] / totalWeight;
       splitDetail[n] = Number(share.toFixed(2));
     });
@@ -2577,17 +2806,133 @@
       
       if (editId) {
         // 更新费用
-        await db.collection('bills').doc(editId).update({
+        appLog('更新费用 - participants: ' + JSON.stringify(participants), 'info');
+        appLog('更新费用 - splitDetail: ' + JSON.stringify(splitDetail), 'info');
+        appLog('更新费用 - 准备更新的数据: ' + JSON.stringify({
           amount,
           title,
           category,
           payer,
           participants,
           splitDetail,
-          time: timeStr ? new Date(timeStr) : new Date(),
-          remark,
-          updatedAt: new Date()
-        });
+          remark
+        }), 'info');
+        
+        try {
+          // 尝试使用 set 方法更新（merge: true 表示合并更新）
+          // 如果 update 方法返回 updated: 0，可能是因为权限或数据格式问题
+          appLog('尝试使用 update 方法更新费用', 'info');
+          const updateResult = await db.collection('bills').doc(editId).update({
+            amount,
+            title,
+            category,
+            payer,
+            participants,
+            splitDetail,
+            time: timeStr ? new Date(timeStr) : new Date(),
+            remark,
+            updatedAt: new Date()
+          });
+          appLog('费用更新返回结果: ' + JSON.stringify(updateResult), 'info');
+          
+          // 如果 updated 为 0，可能是权限或数据格式问题
+          // 尝试先读取完整文档，然后合并数据后使用 set 方法
+          if (updateResult && updateResult.updated === 0) {
+            appLog('update 方法返回 updated: 0，尝试使用 set 方法（读取-合并-写入）', 'warning');
+            try {
+              // 先读取现有文档
+              const existingDoc = await db.collection('bills').doc(editId).get();
+              let existingData = null;
+              if (existingDoc && existingDoc.data) {
+                if (Array.isArray(existingDoc.data)) {
+                  existingData = existingDoc.data[0];
+                } else {
+                  existingData = existingDoc.data;
+                }
+              }
+              
+              if (existingData) {
+                // 合并数据，保留原有字段（如 _id, _openid, activityId, createdAt）
+                const mergedData = {
+                  ...existingData,
+                  amount,
+                  title,
+                  category,
+                  payer,
+                  participants,
+                  splitDetail,
+                  time: timeStr ? new Date(timeStr) : new Date(),
+                  remark,
+                  updatedAt: new Date()
+                };
+                // 移除 _id 和 _openid，这些是系统字段，不应该在 set 时包含
+                delete mergedData._id;
+                delete mergedData._openid;
+                
+                appLog('合并后的数据: ' + JSON.stringify(mergedData), 'info');
+                await db.collection('bills').doc(editId).set(mergedData);
+                appLog('使用 set 方法更新成功', 'success');
+              } else {
+                appLog('无法读取现有文档，无法使用 set 方法', 'error');
+                throw new Error('无法读取现有文档');
+              }
+            } catch (setError) {
+              appLog('使用 set 方法更新失败: ' + setError.message, 'error');
+              appLog('错误详情: ' + JSON.stringify(setError), 'error');
+              // 不抛出错误，让程序继续，但显示警告
+              showGlobalMessage('更新可能未成功，请刷新页面检查', 'warning');
+            }
+          } else {
+            appLog('费用更新成功，返回结果: ' + JSON.stringify(updateResult), 'success');
+          }
+          
+          // 验证更新是否成功 - 重新读取数据
+          await new Promise(resolve => setTimeout(resolve, 500)); // 等待500ms确保数据已更新
+          const verifyBill = await db.collection('bills').doc(editId).get();
+          let verifyData = null;
+          if (verifyBill && verifyBill.data) {
+            if (Array.isArray(verifyBill.data)) {
+              verifyData = verifyBill.data[0];
+            } else {
+              verifyData = verifyBill.data;
+            }
+          }
+          if (verifyData) {
+            appLog('验证更新 - 数据库中的participants: ' + JSON.stringify(verifyData.participants), 'info');
+            appLog('验证更新 - 期望的participants: ' + JSON.stringify(participants), 'info');
+            // 比较时忽略键的顺序
+            const verifyKeys = Object.keys(verifyData.participants || {}).sort();
+            const expectKeys = Object.keys(participants).sort();
+            let participantsMatch = verifyKeys.length === expectKeys.length;
+            if (participantsMatch) {
+              for (const key of expectKeys) {
+                const verifyValue = Number(verifyData.participants[key] || 0);
+                const expectValue = Number(participants[key] || 0);
+                if (verifyValue !== expectValue) {
+                  participantsMatch = false;
+                  appLog(`权重不匹配 - ${key}: 数据库=${verifyValue}, 期望=${expectValue}`, 'error');
+                  break;
+                }
+              }
+            } else {
+              appLog(`键数量不匹配 - 数据库: ${verifyKeys.length} 个键, 期望: ${expectKeys.length} 个键`, 'error');
+            }
+            if (!participantsMatch) {
+              appLog('警告：更新后的participants与期望的不一致！', 'error');
+              appLog('数据库中的完整数据: ' + JSON.stringify(verifyData), 'error');
+            } else {
+              appLog('验证通过：participants已正确更新', 'success');
+            }
+          } else {
+            appLog('警告：无法验证更新结果，无法读取数据', 'warning');
+          }
+        } catch (updateError) {
+          appLog('更新费用时出错: ' + updateError.message, 'error');
+          appLog('错误堆栈: ' + updateError.stack, 'error');
+          showGlobalMessage('更新费用失败：' + updateError.message, 'error');
+          return;
+        }
+        
         delete m.dataset.editId;
         closeBillModal();
         showGlobalMessage('费用已更新');
