@@ -1,24 +1,2764 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <!-- 让手机浏览器默认缩放合适 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>分账记账 Hello World</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AA 分账 - 云端版</title>
+
+  <!-- ① 直接引入 CloudBase JS SDK v2.x（ACCESS_TOKEN_DISABLED 要求 2.0+） -->
+  <!-- 优先使用本地文件，如果不存在则使用 CDN -->
+  <script>
+    (function() {
+      // 优先尝试本地文件
+      const localFiles = ['./tcb-js-sdk.js', './cloudbase.js'];
+      let currentIndex = 0;
+      
+      function tryLoadLocal(index) {
+        if (index >= localFiles.length) {
+          // 本地文件都失败，尝试 CDN
+          loadFromCDN();
+          return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = localFiles[index];
+        script.onload = function() {
+          window.sdkLoaded = true;
+          window.sdkSource = 'local:' + localFiles[index];
+          console.log('SDK 脚本加载成功（本地文件: ' + localFiles[index] + '）');
+          // 立即检查全局对象
+          checkSDKGlobals('本地文件加载后（立即）');
+          
+          // 延迟检查（某些 SDK 可能需要时间初始化）
+          setTimeout(function() {
+            checkSDKGlobals('本地文件加载后（延迟 500ms）');
+          }, 500);
+        };
+        script.onerror = function() {
+          console.log('本地文件不存在: ' + localFiles[index] + '，尝试下一个...');
+          currentIndex++;
+          tryLoadLocal(currentIndex);
+        };
+        document.head.appendChild(script);
+      }
+      
+      function loadFromCDN() {
+        console.log('尝试从 CDN 加载 SDK...');
+        const script = document.createElement('script');
+        script.src = 'https://static.cloudbase.net/cloudbase-js-sdk/2.9.2/cloudbase.full.js';
+        script.onload = function() {
+          window.sdkLoaded = true;
+          window.sdkSource = 'CDN';
+          console.log('SDK 脚本加载成功（CDN）');
+          // 立即检查全局对象
+          checkSDKGlobals('CDN 加载后（立即）');
+          
+          // 延迟检查（某些 SDK 可能需要时间初始化）
+          setTimeout(function() {
+            checkSDKGlobals('CDN 加载后（延迟 500ms）');
+          }, 500);
+          
+          setTimeout(function() {
+            checkSDKGlobals('CDN 加载后（延迟 1s）');
+          }, 1000);
+        };
+        script.onerror = function() {
+          window.sdkLoadError = true;
+          console.error('SDK 脚本加载失败（CDN 也无法访问）');
+          showSDKError();
+        };
+        document.head.appendChild(script);
+      }
+      
+      // 开始加载
+      tryLoadLocal(0);
+    })();
+    
+    // 检查 SDK 全局对象的函数
+    function checkSDKGlobals(context) {
+      const globals = {
+        'cloudbase': typeof cloudbase !== 'undefined' ? cloudbase : undefined,
+        'tcb': typeof tcb !== 'undefined' ? tcb : undefined,
+        'CloudBase': typeof CloudBase !== 'undefined' ? CloudBase : undefined,
+        'window.cloudbase': typeof window.cloudbase !== 'undefined' ? window.cloudbase : undefined,
+        'window.tcb': typeof window.tcb !== 'undefined' ? window.tcb : undefined,
+        'window.CloudBase': typeof window.CloudBase !== 'undefined' ? window.CloudBase : undefined
+      };
+      
+      const found = Object.entries(globals).filter(([name, value]) => value !== undefined);
+      console.log(`[${context}] 检查全局对象:`, found.length > 0 ? found.map(([name]) => name).join(', ') : '未找到任何全局对象');
+      
+      if (found.length === 0) {
+        console.warn('SDK 脚本已加载，但未找到预期的全局对象。');
+        console.warn('可能的原因：');
+        console.warn('1. SDK 版本使用不同的导出方式');
+        console.warn('2. SDK 需要额外的初始化步骤');
+        console.warn('3. SDK 使用模块化导出，需要通过其他方式访问');
+        
+        // 列出所有可能的 SDK 相关属性
+        try {
+          const possibleKeys = Object.keys(window).filter(k => {
+            const lower = k.toLowerCase();
+            return lower.includes('cloud') || 
+                   lower.includes('tcb') || 
+                   lower.includes('cloudbase') ||
+                   lower.includes('tencent');
+          });
+          if (possibleKeys.length > 0) {
+            console.warn('发现可能的 SDK 相关属性:', possibleKeys);
+            // 检查这些属性是否是函数或对象
+            possibleKeys.forEach(key => {
+              const value = window[key];
+              const type = typeof value;
+              console.log(`  ${key}: ${type}`, type === 'object' && value !== null ? Object.keys(value).slice(0, 5) : '');
+            });
+          } else {
+            console.warn('未在 window 对象上找到任何 SDK 相关的属性');
+          }
+        } catch (e) {
+          console.error('检查 window 对象时出错:', e);
+        }
+      } else {
+        // 如果找到了，检查是否有 init 方法
+        found.forEach(([name]) => {
+          try {
+            const sdk = name.includes('.') ? window[name.split('.')[1]] : eval(name);
+            if (sdk && typeof sdk.init === 'function') {
+              console.log(`✓ 找到 SDK 对象 ${name}，包含 init 方法`);
+            } else if (sdk) {
+              console.warn(`⚠ SDK 对象 ${name} 存在，但可能不是预期的格式:`, typeof sdk, Object.keys(sdk || {}).slice(0, 10));
+            }
+          } catch (e) {
+            // 忽略错误
+          }
+        });
+      }
+    }
+    
+    function showSDKError() {
+      // 延迟显示错误，避免在页面加载时立即弹出
+      setTimeout(function() {
+        const errorMsg = document.createElement('div');
+        errorMsg.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#c5221f;color:#fff;padding:16px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;max-width:600px;font-size:14px;line-height:1.6;';
+        errorMsg.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;">⚠️ SDK 加载失败</div>' +
+          '<div style="margin-bottom:8px;">无法加载腾讯云开发 SDK，请尝试以下解决方案：</div>' +
+          '<div style="margin-left:16px;margin-bottom:8px;">' +
+          '<div>1. 检查网络连接，确保可以访问外网</div>' +
+          '<div>2. 打开浏览器开发者工具（F12）→ Network 标签，查看加载状态</div>' +
+          '<div>3. 下载 SDK 到本地：</div>' +
+          '<div style="margin-left:16px;margin-top:4px;">' +
+          '   • 访问：<a href="https://web.sdk.qcloud.com/cloudbase/js/2.8.3/cloudbase.js" target="_blank" style="color:#fff;text-decoration:underline;">https://web.sdk.qcloud.com/cloudbase/js/2.8.3/cloudbase.js</a><br>' +
+          '   • 保存为 dist/tcb-js-sdk.js 或 dist/cloudbase.js<br>' +
+          '   • 刷新页面即可自动使用本地文件' +
+          '</div>' +
+          '</div>' +
+          '<button onclick="this.parentElement.remove()" style="margin-top:8px;padding:6px 12px;background:#fff;color:#c5221f;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">关闭</button>';
+        document.body.appendChild(errorMsg);
+      }, 2000);
+    }
+  </script>
+
   <style>
-    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial;background:#f5f5f5;padding:20px}
-    h1{color:#07c160;text-align:center}
-    .card{background:#fff;border-radius:8px;padding:15px;margin:15px 0;box-shadow:0 1px 3px rgba(0,0,0,.1)}
-    button{width:100%;padding:10px;font-size:18px;border:0;background:#07c160;color:#fff;border-radius:4px}
+    body {
+      margin: 0;
+      font-family: -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial;
+      background: #f5f5f5;
+    }
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    h1,h2,h3 { margin: 0 0 12px; }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .btn {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 4px;
+      border: none;
+      background: #007bff;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background: #6c757d;
+    }
+    .btn-full {
+      width: 100%;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    .btn:active { opacity: .8; }
+    input,select,textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px;
+      margin-top: 4px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      font-size: 14px;
+    }
+    label {
+      font-size: 14px;
+      font-weight: 500;
+      display: block;
+      margin-top: 4px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .row > * { margin-right: 8px; }
+    .row > *:last-child { margin-right: 0; }
+    .activity-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 12px;
+      font-size: 12px;
+      background: #e9f5ff;
+      color: #007bff;
+      margin-right: 4px;
+    }
+    .amount {
+      color: #007bff;
+      font-weight: bold;
+    }
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 8px;
+    }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px 0;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .tab-active {
+      border-bottom: 2px solid #007bff;
+      color: #007bff;
+      font-weight: 600;
+    }
+    .hidden { display: none; }
+    .message {
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .message-success { background: #e6ffed; color: #137333; }
+    .message-error { background: #ffecec; color: #c5221f; }
+    .bill-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .bill-item:last-child { border-bottom: none; }
+    .bill-item .row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .bill-item .row > div:first-child {
+      flex: 1;
+      min-width: 0; /* 允许内容收缩 */
+    }
+    .bill-item .row > div:last-child {
+      flex-shrink: 0; /* 金额不收缩 */
+      white-space: nowrap; /* 金额不换行 */
+    }
+    .small {
+      font-size: 12px;
+      color: #777;
+    }
+    .member-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+    .member-row:last-child { border-bottom: none; }
+    .float-btn {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      font-size: 28px;
+      line-height: 52px;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,.2);
+      cursor: pointer;
+    }
+    .modal {
+      position: fixed;
+      left: 0; right: 0; top: 0; bottom: 0;
+      background: rgba(0,0,0,.4);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal-content {
+      background: #fff;
+      width: 100%;
+      max-width: 720px;
+      border-radius: 12px 12px 0 0;
+      padding: 16px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-sizing: border-box;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    /* 日志系统样式 */
+    #logPanel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 300px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      border-top: 2px solid #007bff;
+      z-index: 2000;
+      display: none;
+      flex-direction: column;
+    }
+    #logPanel.show {
+      display: flex;
+    }
+    #logHeader {
+      background: #252526;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #3e3e42;
+    }
+    #logTitle {
+      font-weight: bold;
+      color: #fff;
+    }
+    #logControls {
+      display: flex;
+      gap: 8px;
+    }
+    #logControls button {
+      padding: 4px 8px;
+      font-size: 11px;
+      background: #0e639c;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    #logControls button:hover {
+      background: #1177bb;
+    }
+    #logContent {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      line-height: 1.5;
+    }
+    .log-entry {
+      margin: 2px 0;
+      padding: 2px 4px;
+      border-left: 2px solid transparent;
+      word-wrap: break-word;
+    }
+    .log-entry.info {
+      border-left-color: #4ec9b0;
+      color: #4ec9b0;
+    }
+    .log-entry.success {
+      border-left-color: #89d185;
+      color: #89d185;
+    }
+    .log-entry.warning {
+      border-left-color: #dcdcaa;
+      color: #dcdcaa;
+    }
+    .log-entry.error {
+      border-left-color: #f48771;
+      color: #f48771;
+    }
+    .log-time {
+      color: #858585;
+      margin-right: 8px;
+    }
+    #logToggle {
+      position: fixed;
+      bottom: 10px;
+      right: 80px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+      z-index: 1999;
+    }
+    #logToggle:hover {
+      background: #0056b3;
+    }
   </style>
 </head>
 <body>
-  <h1>Hello, 分账记账 by alex2088</h1>
+<div class="page">
 
-  <div class="card">
-    <p>总金额：<span id="total">0.00</span> 元</p>
-    <p>人数：<span id="person">0</span></p>
-    <p>每人应付：<span id="avg">0.00</span> 元</p>
+  <!-- 顶部：当前用户 -->
+  <div class="card" id="userCard">
+    <h2 style="color: #28a745; text-align: center; margin-bottom: 20px;">我们AA吧</h2>
+    <div>
+      <label>用户名：</label>
+      <input id="inputUserName" placeholder="输入你的名字，如：唐朝奎" />
+    </div>
+    <div id="passwordSection" style="display:none;">
+      <label>密码：</label>
+      <div style="position: relative;">
+        <input id="inputPassword" type="password" placeholder="请输入密码" style="padding-right: 80px;" />
+        <button type="button" id="togglePasswordBtn" onclick="togglePasswordVisibility()" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #007bff; cursor: pointer; font-size: 12px; padding: 4px 8px;">显示</button>
+      </div>
+    </div>
+    <div id="confirmPasswordSection" style="display:none;">
+      <label>确认密码：</label>
+      <input id="inputConfirmPassword" type="password" placeholder="请再次输入密码" />
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn btn-full" onclick="handleLoginOrRegister()">登录/注册</button>
+    </div>
+    <div class="small" id="currentUserLabel"></div>
   </div>
 
-  <button
+  <!-- 消息提示 -->
+  <div id="globalMessage"></div>
+
+  <!-- 首页：活动列表 -->
+  <div id="screenHome" class="card hidden">
+    <div class="row">
+      <h3>活动列表</h3>
+      <button class="btn btn-secondary" onclick="showCreateActivityModal()">+ 创建活动</button>
+    </div>
+    <div id="activityList" class="small" style="margin-top:8px;">
+      加载中...
+    </div>
+  </div>
+
+  <!-- 活动详情页 -->
+  <div id="screenActivity" class="hidden">
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="small"><a href="javascript:void(0)" onclick="backToHome()">← 返回</a></div>
+          <h3 id="activityTitle">活动名称</h3>
+          <div class="small" id="activityMeta"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab -->
+    <div class="card">
+      <div class="tabs">
+        <div id="tabMembers" class="tab" onclick="switchActivityTab('members')">成员</div>
+        <div id="tabBills" class="tab tab-active" onclick="switchActivityTab('bills')">费用</div>
+        <div id="tabSummary" class="tab" onclick="switchActivityTab('summary')">结算</div>
+      </div>
+
+      <!-- 费用 TAB -->
+      <div id="tabContentBills">
+        <div id="billList"></div>
+        <button class="btn btn-full" style="margin-top:8px;" onclick="showBillModal()">+ 添加费用</button>
+      </div>
+
+      <!-- 成员 TAB -->
+      <div id="tabContentMembers" class="hidden">
+        <div id="memberList"></div>
+      </div>
+
+      <!-- 结算 TAB -->
+      <div id="tabContentSummary" class="hidden">
+        <div id="summaryContent"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 创建活动 Modal -->
+<div id="modalActivity" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>创建活动</h3>
+      <button class="btn btn-secondary" onclick="closeActivityModal()">关闭</button>
+    </div>
+    <label>活动名称</label>
+    <input id="actName" placeholder="例如：ddz 聚餐" />
+    <label>活动类型</label>
+    <select id="actType" onchange="handleActivityTypeChange()">
+      <option value="聚餐" selected>聚餐</option>
+      <option value="旅游">旅游</option>
+      <option value="自驾游">自驾游</option>
+      <option value="团购">团购</option>
+      <option value="户外活动">户外活动</option>
+      <option value="自定义">自定义</option>
+    </select>
+    <div id="customTypeSection" style="display:none;">
+      <label>自定义类型</label>
+      <input id="actCustomType" placeholder="输入自定义活动类型" maxlength="20" />
+      <div class="small" style="color:#777; margin-top:4px;">提示：自定义类型最多保存5个，后续可从列表中选择</div>
+    </div>
+    <label>参与成员（输入姓名）</label>
+    <div id="actMembersContainer"></div>
+    <button type="button" class="btn btn-secondary" onclick="addActivityMember()" style="margin-top: 8px;">+ 添加成员</button>
+    <label>备注</label>
+    <textarea id="actRemark" rows="2"></textarea>
+    <button class="btn btn-full" onclick="createActivity()">创建</button>
+  </div>
+</div>
+
+<!-- 添加费用 Modal -->
+<div id="modalBill" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>添加费用</h3>
+      <button class="btn btn-secondary" onclick="closeBillModal()">关闭</button>
+    </div>
+    <label>金额（元）</label>
+    <input id="billAmount" type="number" step="0.01" min="0" />
+    <label>费用名称</label>
+    <input id="billTitle" placeholder="例如：晚餐、山姆购物" />
+    <label>分类</label>
+    <input id="billCategory" placeholder="例如：美食、交通等" />
+    <label>时间</label>
+    <input id="billTime" type="datetime-local" />
+    <label>付款人</label>
+    <select id="billPayer"></select>
+    <label>参与成员（选择权重：0表示不参与，1-3表示人数）</label>
+    <div id="billParticipants"></div>
+    <button type="button" class="btn btn-secondary" onclick="addBillParticipant()" style="margin-top: 8px;">+ 添加参与人</button>
+    <label>备注</label>
+    <textarea id="billRemark" rows="2"></textarea>
+    <button class="btn btn-full" onclick="saveBill()" id="saveBillBtn">保存费用</button>
+  </div>
+</div>
+
+<!-- 确认删除对话框 -->
+<div id="confirmDeleteModal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width: 400px;">
+    <div style="text-align: center; padding: 20px;">
+      <h3 style="margin-bottom: 16px;">确认删除</h3>
+      <p id="confirmDeleteMessage" style="margin-bottom: 20px; font-size: 14px; color: #333;"></p>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button class="btn btn-secondary" id="confirmDeleteCancel" style="flex: 1;">取消</button>
+        <button class="btn" id="confirmDeleteOk" style="flex: 1; background: #c5221f;">确认删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ====== 自定义日志系统 ======
+  const AppLogger = {
+    logs: [],
+    maxLogs: 500,
+    
+    log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const logEntry = {
+        time: timestamp,
+        message: String(message),
+        type: type
+      };
+      
+      this.logs.push(logEntry);
+      
+      // 限制日志数量
+      if (this.logs.length > this.maxLogs) {
+        this.logs.shift();
+      }
+      
+      // 更新显示
+      this.updateDisplay();
+      
+      // 同时输出到控制台（可选）
+      const consoleMethod = type === 'error' ? 'error' : 
+                           type === 'warning' ? 'warn' : 
+                           type === 'success' ? 'log' : 'log';
+      console[consoleMethod](`[${timestamp}] ${message}`);
+    },
+    
+    updateDisplay() {
+      const content = document.getElementById('logContent');
+      if (!content) return;
+      
+      content.innerHTML = this.logs.map(entry => {
+        const timeClass = 'log-time';
+        const entryClass = `log-entry ${entry.type}`;
+        return `<div class="${entryClass}"><span class="${timeClass}">[${entry.time}]</span>${this.escapeHtml(entry.message)}</div>`;
+      }).join('');
+      
+      // 自动滚动到底部
+      content.scrollTop = content.scrollHeight;
+    },
+    
+    escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    },
+    
+    clear() {
+      this.logs = [];
+      this.updateDisplay();
+    },
+    
+    info(message) { this.log(message, 'info'); },
+    success(message) { this.log(message, 'success'); },
+    warning(message) { this.log(message, 'warning'); },
+    error(message) { this.log(message, 'error'); }
+  };
+  
+  // 全局日志函数
+  function appLog(message, type = 'info') {
+    AppLogger.log(message, type);
+  }
+  
+  function toggleLogPanel() {
+    const panel = document.getElementById('logPanel');
+    if (panel) {
+      panel.classList.toggle('show');
+    }
+  }
+  
+  function clearLogs() {
+    AppLogger.clear();
+  }
+  
+  // 页面加载时初始化日志
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      AppLogger.info('页面加载完成，开始初始化');
+    });
+  } else {
+    AppLogger.info('页面已加载，开始初始化');
+  }
+
+  // ====== CloudBase 初始化 ======
+  // ② 这里已经写成你的环境 ID
+  const envId = 'cloud1-0g37deo4d3db8310';
+
+  let app, db, auth;
+  let currentUserName = '';
+  let currentActivity = null;     // 当前活动文档
+  let currentActivityBills = [];  // 当前活动所有账单
+  let currentActivityBalances = {};  // 当前活动余额 map
+  let passwordErrorCount = {};    // 记录每个用户名的密码错误次数 {用户名: 错误次数}
+  let customActivityTypes = [];    // 自定义活动类型列表
+
+  function showGlobalMessage(text, type = 'success') {
+    const div = document.getElementById('globalMessage');
+    if (!text) {
+      div.innerHTML = '';
+      return;
+    }
+    const cls = type === 'error' ? 'message message-error' : 'message message-success';
+    div.className = cls;
+    div.textContent = text;
+    setTimeout(() => { div.textContent = ''; }, 3000);
+  }
+
+  function addDebugLog(message) {
+    console.log(`[${new Date().toLocaleTimeString()}] ${message}`);
+  }
+
+  // 提取错误信息的辅助函数
+  function extractErrorInfo(error) {
+    if (!error) {
+      return { message: '未知错误', code: null, details: null };
+    }
+    
+    // 尝试多种方式提取错误信息
+    let message = error.message || error.errMsg || error.errorMessage || error.msg;
+    let code = error.code || error.errCode || error.errorCode;
+    let details = null;
+    
+    // 如果没有 message，尝试 toString
+    if (!message) {
+      try {
+        const str = error.toString();
+        if (str !== '[object Object]') {
+          message = str;
+        }
+      } catch (e) {
+        // 忽略
+      }
+    }
+    
+    // 如果还是没有，尝试 JSON.stringify
+    if (!message || message === '[object Object]') {
+      try {
+        const json = JSON.stringify(error);
+        if (json && json !== '{}') {
+          message = json;
+        }
+      } catch (e) {
+        // 忽略
+      }
+    }
+    
+    // 如果还是没有，尝试检查错误对象的所有属性
+    if (!message || message === '[object Object]') {
+      try {
+        const keys = Object.keys(error);
+        if (keys.length > 0) {
+          details = '错误对象属性: ' + keys.join(', ');
+          // 尝试从常见属性中提取信息
+          for (const key of ['message', 'errMsg', 'errorMessage', 'msg', 'description', 'detail']) {
+            if (error[key] && typeof error[key] === 'string') {
+              message = error[key];
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        // 忽略
+      }
+    }
+    
+    // 最后的后备方案
+    if (!message || message === '[object Object]') {
+      message = '未知错误（错误对象无法解析）';
+      try {
+        details = '错误对象类型: ' + typeof error + ', 构造函数: ' + (error.constructor ? error.constructor.name : '未知');
+      } catch (e) {
+        // 忽略
+      }
+    }
+    
+    return { message, code, details };
+  }
+
+  async function initCloudBase() {
+    try {
+      // 检查 SDK 脚本加载状态
+      appLog('=== 开始检查 SDK 加载状态 ===', 'info');
+      
+      // 检查所有可能的 SDK 脚本标签（包括动态加载的）
+      const sdkScripts = Array.from(document.querySelectorAll('script')).filter(s => {
+        const src = s.src || '';
+        return src.includes('cloudbase') || src.includes('tcb-js-sdk') || src.includes('tcb.js');
+      });
+      
+      if (sdkScripts.length > 0) {
+        appLog('找到 ' + sdkScripts.length + ' 个 SDK 脚本标签', 'success');
+        sdkScripts.forEach((script, idx) => {
+          appLog(`  脚本 ${idx + 1}: ${script.src || '内联脚本'}`, 'info');
+        });
+      } else {
+        appLog('未找到 SDK 脚本标签（可能是动态加载）', 'warning');
+      }
+      
+      // 检查脚本加载状态
+      if (window.sdkLoaded) {
+        appLog('脚本 onload 事件已触发（加载成功）', 'success');
+        if (window.sdkSource) {
+          appLog('SDK 来源: ' + window.sdkSource, 'info');
+        }
+      } else if (window.sdkLoadError) {
+        appLog('脚本 onerror 事件已触发（加载失败）', 'error');
+        appLog('请检查浏览器 Network 面板，查看 SDK 文件的加载状态', 'error');
+      } else {
+        appLog('脚本加载状态：未知（可能还在加载中）', 'warning');
+      }
+      
+      // 检查所有可能的全局对象
+      appLog('检查全局对象...', 'info');
+      const checks = [
+        { name: 'cloudbase', check: () => typeof cloudbase },
+        { name: 'tcb', check: () => typeof tcb },
+        { name: 'CloudBase', check: () => typeof CloudBase },
+        { name: 'window.cloudbase', check: () => typeof window.cloudbase },
+        { name: 'window.tcb', check: () => typeof window.tcb },
+        { name: 'window.CloudBase', check: () => typeof window.CloudBase }
+      ];
+      
+      checks.forEach(({ name, check }) => {
+        try {
+          const result = check();
+          appLog(`  ${name}: ${result}`, result !== 'undefined' ? 'success' : 'info');
+        } catch (e) {
+          appLog(`  ${name}: 检查出错 - ${e.message}`, 'error');
+        }
+      });
+      
+      // 等待 SDK 加载完成（最多等待 10 秒）
+      appLog('等待 SDK 加载（最多 10 秒）...', 'info');
+      let waitCount = 0;
+      const hasSDK = () => {
+        try {
+          // 检查所有可能的全局变量名（使用多种方式确保检测到）
+          return (typeof cloudbase !== 'undefined' && cloudbase !== null) || 
+                 (typeof tcb !== 'undefined' && tcb !== null) || 
+                 (typeof CloudBase !== 'undefined' && CloudBase !== null) ||
+                 (typeof window.cloudbase !== 'undefined' && window.cloudbase !== null) || 
+                 (typeof window.tcb !== 'undefined' && window.tcb !== null) ||
+                 (typeof window.CloudBase !== 'undefined' && window.CloudBase !== null) ||
+                 ('tcb' in window && window.tcb !== null && window.tcb !== undefined) ||
+                 ('cloudbase' in window && window.cloudbase !== null && window.cloudbase !== undefined) ||
+                 ('CloudBase' in window && window.CloudBase !== null && window.CloudBase !== undefined);
+        } catch (e) {
+          return false;
+        }
+      };
+      
+      while (!hasSDK() && waitCount < 100) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        waitCount++;
+        if (waitCount % 10 === 0) {
+          appLog(`已等待 ${waitCount * 0.1} 秒...`, 'info');
+          // 每 1 秒检查一次全局对象
+          if (window.sdkLoaded) {
+            appLog('脚本已加载，但全局对象仍未找到，继续等待...', 'warning');
+            // 列出所有可能的 SDK 相关属性
+            try {
+              const possibleKeys = Object.keys(window).filter(k => 
+                k.toLowerCase().includes('cloud') || 
+                k.toLowerCase().includes('tcb') ||
+                k.toLowerCase().includes('cloudbase')
+              );
+              if (possibleKeys.length > 0) {
+                appLog('发现可能的 SDK 相关属性: ' + possibleKeys.join(', '), 'info');
+                // 详细检查 tcb 属性
+                if ('tcb' in window) {
+                  const tcbValue = window.tcb;
+                  appLog('window.tcb 存在，类型: ' + typeof tcbValue + ', 值: ' + (tcbValue ? '非空' : '空/null'), 'info');
+                  if (tcbValue && typeof tcbValue === 'object') {
+                    appLog('window.tcb 是对象，包含方法: ' + Object.keys(tcbValue).filter(k => typeof tcbValue[k] === 'function').slice(0, 10).join(', '), 'info');
+                    if (typeof tcbValue.init === 'function') {
+                      appLog('✓ window.tcb 包含 init 方法！', 'success');
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              appLog('检查 window 对象时出错: ' + e.message, 'error');
+            }
+          }
+        }
+      }
+
+      // 兼容多种全局对象：cloudbase、tcb、CloudBase（使用多种方式检查）
+      let cloudbaseSDK;
+      try {
+        // 优先尝试直接访问 window.tcb（即使 typeof 可能返回 undefined）
+        if ('tcb' in window) {
+          try {
+            const testTcb = window.tcb;
+            if (testTcb !== null && testTcb !== undefined) {
+              cloudbaseSDK = testTcb;
+              appLog('✓ 找到 window.tcb，类型: ' + typeof testTcb, 'success');
+              if (typeof testTcb.init === 'function') {
+                appLog('✓ window.tcb 包含 init 方法', 'success');
+              } else {
+                appLog('⚠ window.tcb 存在但不包含 init 方法，检查其他属性...', 'warning');
+                appLog('window.tcb 的属性: ' + Object.keys(testTcb).slice(0, 10).join(', '), 'info');
+              }
+            }
+          } catch (e) {
+            appLog('访问 window.tcb 时出错: ' + e.message, 'error');
+          }
+        }
+        
+        // 如果还没找到，尝试其他方式
+        if (!cloudbaseSDK) {
+          if (typeof window.tcb !== 'undefined' && window.tcb !== null) {
+            cloudbaseSDK = window.tcb;
+            appLog('使用 window.tcb 作为 SDK（通过 typeof 检查）', 'success');
+          } else if (typeof tcb !== 'undefined' && tcb !== null) {
+            cloudbaseSDK = tcb;
+            appLog('使用全局 tcb 作为 SDK', 'success');
+          } else if (typeof window.cloudbase !== 'undefined' && window.cloudbase !== null) {
+            cloudbaseSDK = window.cloudbase;
+            appLog('使用 window.cloudbase 作为 SDK', 'success');
+          } else if (typeof cloudbase !== 'undefined' && cloudbase !== null) {
+            cloudbaseSDK = cloudbase;
+            appLog('使用全局 cloudbase 作为 SDK', 'success');
+          } else if (typeof window.CloudBase !== 'undefined' && window.CloudBase !== null) {
+            cloudbaseSDK = window.CloudBase;
+            appLog('使用 window.CloudBase 作为 SDK', 'success');
+          } else if (typeof CloudBase !== 'undefined' && CloudBase !== null) {
+            cloudbaseSDK = CloudBase;
+            appLog('使用全局 CloudBase 作为 SDK', 'success');
+          }
+        }
+      } catch (e) {
+        appLog('获取 SDK 对象时出错: ' + e.message, 'error');
+        cloudbaseSDK = undefined;
+      }
+      
+      if (typeof cloudbaseSDK === 'undefined') {
+        appLog('=== SDK 加载失败诊断 ===', 'error');
+        appLog('脚本加载状态: ' + (window.sdkLoaded ? '成功' : window.sdkLoadError ? '失败' : '未知'), 
+               window.sdkLoaded ? 'success' : 'error');
+        
+        appLog('可能的原因：', 'error');
+        appLog('1. 网络连接问题，无法访问腾讯云 CDN', 'error');
+        appLog('2. 防火墙/代理阻止了 CDN 访问', 'error');
+        appLog('3. CDN 服务器暂时不可用', 'error');
+        appLog('4. SDK URL 可能已过期，需要更新', 'error');
+        appLog('', 'info');
+        appLog('解决方案：', 'warning');
+        appLog('1. 打开浏览器开发者工具（F12）', 'warning');
+        appLog('2. 切换到 Network（网络）标签', 'warning');
+        appLog('3. 刷新页面，查找 cloudbase.js 文件', 'warning');
+        appLog('4. 查看状态码：200=成功，其他=失败', 'warning');
+        appLog('5. 如果失败，可以尝试更新 SDK URL 或下载到本地使用', 'warning');
+        
+        throw new Error('腾讯云开发 SDK 未正确加载\n\n' +
+          '请检查浏览器 Network 面板，查看 cloudbase.js 是否加载成功\n' +
+          '如果网络问题，可以下载 SDK 到本地使用或更新 SDK URL');
+      }
+
+      const sdkName = typeof cloudbase !== 'undefined' ? 'cloudbase' : 'tcb';
+      appLog('SDK 已加载，使用的全局对象: ' + sdkName, 'success');
+
+      // 检查 SDK 对象是否有效
+      if (!cloudbaseSDK) {
+        throw new Error('SDK 对象为空，无法初始化');
+      }
+      appLog('SDK 对象类型: ' + typeof cloudbaseSDK, 'info');
+      appLog('SDK 对象是否包含 init 方法: ' + (typeof cloudbaseSDK.init === 'function'), 'info');
+
+      // 初始化应用
+      appLog('开始初始化 CloudBase 应用，环境 ID: ' + envId, 'info');
+      app = cloudbaseSDK.init({ env: envId });
+      
+      if (!app) {
+        throw new Error('app.init() 返回了空值');
+      }
+      appLog('应用初始化成功', 'success');
+      appLog('应用对象类型: ' + typeof app, 'info');
+      appLog('应用是否包含 auth 方法: ' + (typeof app.auth === 'function'), 'info');
+      appLog('应用是否包含 database 方法: ' + (typeof app.database === 'function'), 'info');
+
+      // 初始化认证
+      appLog('初始化认证模块...', 'info');
+      auth = app.auth({
+        persistence: 'local'  // 匿名登录状态保存在本地
+      });
+      
+      if (!auth) {
+        throw new Error('app.auth() 返回了空值');
+      }
+      appLog('认证模块初始化成功', 'success');
+      appLog('认证对象类型: ' + typeof auth, 'info');
+      appLog('认证是否包含 getLoginState 方法: ' + (typeof auth.getLoginState === 'function'), 'info');
+      appLog('认证是否包含 signInAnonymously 方法: ' + (typeof auth.signInAnonymously === 'function'), 'info');
+
+      // 匿名登录（需要在 CloudBase 控制台已开启"允许匿名登录"）
+      appLog('检查登录状态...', 'info');
+      let loginState = null;
+      try {
+        loginState = await auth.getLoginState();
+        appLog('登录状态检查完成，结果: ' + (loginState ? '已登录' : '未登录'), 'success');
+      } catch (stateError) {
+        // 详细提取错误信息
+        const errorDetails = extractErrorInfo(stateError);
+        const errorMsg = errorDetails.message || '';
+        
+        // 检查是否是"未认证"错误（这是正常的，表示需要登录）
+        if (errorMsg.includes('unauthenticated') || 
+            errorMsg.includes('credentials not found') ||
+            errorMsg.includes('未认证') ||
+            errorDetails.code === 'unauthenticated') {
+          appLog('未登录状态（这是正常的，将进行匿名登录）', 'info');
+          loginState = null; // 设置为未登录状态
+        } else {
+          // 其他错误才抛出
+          appLog('检查登录状态时出错: ' + errorDetails.message, 'error');
+          if (errorDetails.code) {
+            appLog('错误代码: ' + errorDetails.code, 'error');
+          }
+          if (errorDetails.details) {
+            appLog('错误详情: ' + errorDetails.details, 'error');
+          }
+          throw stateError;
+        }
+      }
+      
+      if (!loginState) {
+        appLog('开始匿名登录...', 'info');
+        try {
+          // SDK 2.0+ 使用 signInAnonymously() 方法
+          if (typeof auth.signInAnonymously === 'function') {
+            await auth.signInAnonymously();
+          } else {
+            // 兼容旧版本的匿名登录方式
+            await auth.anonymousAuthProvider().signIn();
+          }
+          loginState = await auth.getLoginState();
+          appLog('匿名登录成功', 'success');
+        } catch (loginError) {
+          const errorDetails = extractErrorInfo(loginError);
+          appLog('匿名登录失败: ' + errorDetails.message, 'error');
+          if (errorDetails.code) {
+            appLog('错误代码: ' + errorDetails.code, 'error');
+          }
+          if (errorDetails.details) {
+            appLog('错误详情: ' + errorDetails.details, 'error');
+          }
+          
+          const errorMsg = errorDetails.message || '未知错误';
+          if (errorMsg.includes('ACCESS_TOKEN_DISABLED') || 
+              errorMsg.includes('匿名登录') || 
+              errorMsg.includes('anonymous') ||
+              errorDetails.code === 'ACCESS_TOKEN_DISABLED') {
+            throw new Error('请前往云开发控制台开启匿名登录功能：\n' +
+              'https://tcb.cloud.tencent.com/dev#/identity/login-manage\n\n' +
+              '详细步骤：\n' +
+              '1. 打开上述链接\n' +
+              '2. 找到"匿名登录"选项\n' +
+              '3. 点击"开启"按钮\n' +
+              '4. 刷新本页面重试');
+          }
+          throw loginError;
+        }
+      } else {
+        appLog('已存在登录状态', 'info');
+      }
+
+      db = app.database();
+
+      appLog('CloudBase 初始化成功', 'success');
+      showGlobalMessage('云开发初始化成功');
+    } catch (e) {
+      // 详细提取错误信息
+      const errorDetails = extractErrorInfo(e);
+      appLog('初始化失败: ' + errorDetails.message, 'error');
+      if (errorDetails.code) {
+        appLog('错误代码: ' + errorDetails.code, 'error');
+      }
+      if (errorDetails.details) {
+        appLog('错误详情: ' + errorDetails.details, 'error');
+      }
+      const errorStack = e.stack || '';
+      if (errorStack) {
+        appLog('错误堆栈: ' + errorStack.split('\n').slice(0, 3).join('\n'), 'error');
+      }
+      appLog('错误类型: ' + (e.name || typeof e), 'error');
+      showGlobalMessage('云开发初始化失败：' + errorDetails.message, 'error');
+      // 设置 db 为 null，防止后续操作
+      db = null;
+    }
+  }
+
+  // ====== 用户登录/注册 ======
+  // 简单的密码哈希函数（使用 base64 编码，实际应用中应使用更安全的哈希算法）
+  function hashPassword(password) {
+    // 简单的 base64 编码（仅用于演示，生产环境应使用 bcrypt 等）
+    return btoa(unescape(encodeURIComponent(password)));
+  }
+  
+  // 从本地加载用户名和密码
+  async function loadUserName() {
+    appLog('=== 开始加载用户信息 ===', 'info');
+    
+    // 从本地存储加载用户名和密码
+    currentUserName = localStorage.getItem('aa_user_name') || '';
+    const savedPasswordHashed = localStorage.getItem('aa_user_password') || ''; // 哈希后的密码（用于验证）
+    const savedPasswordPlain = localStorage.getItem('aa_user_password_plain') || ''; // 原始密码（用于显示）
+    
+    appLog('本地存储中的用户名: ' + (currentUserName || '无'), currentUserName ? 'success' : 'info');
+    appLog('本地存储中的密码: ' + (savedPasswordHashed ? '已保存' : '无'), savedPasswordHashed ? 'success' : 'info');
+    
+    // 更新 UI
+    updateUserNameUI();
+    
+    // 如果有保存的用户名，自动填充
+    if (currentUserName) {
+      document.getElementById('inputUserName').value = currentUserName;
+      
+      if (savedPasswordHashed) {
+        // 如果有保存的密码，显示密码输入框并填充（以*显示）
+        document.getElementById('passwordSection').style.display = 'block';
+        document.getElementById('confirmPasswordSection').style.display = 'none';
+        // 在密码输入框中显示星号（不显示真实密码）
+        const passwordInput = document.getElementById('inputPassword');
+        const toggleBtn = document.getElementById('togglePasswordBtn');
+        // 临时改为 text 类型以显示星号，用户点击时改回 password 类型
+        passwordInput.type = 'text';
+        passwordInput.value = '********'; // 显示星号
+        passwordInput.dataset.hasSavedPassword = 'true'; // 标记有保存的密码
+        passwordInput.dataset.savedPasswordHashed = savedPasswordHashed; // 保存哈希后的密码（用于验证）
+        passwordInput.dataset.savedPasswordPlain = savedPasswordPlain; // 保存原始密码（用于显示）
+        passwordInput.dataset.showingStars = 'true'; // 标记当前显示的是星号
+        
+        // 更新显示/隐藏按钮文本
+        toggleBtn.textContent = '显示';
+        toggleBtn.dataset.showingStars = 'true';
+        
+        // 当用户点击密码输入框时，清空星号并改回 password 类型
+        passwordInput.addEventListener('focus', function() {
+          if (this.value === '********' && this.dataset.hasSavedPassword === 'true') {
+            this.value = '';
+            this.type = 'password'; // 改回 password 类型
+            this.dataset.hasSavedPassword = 'false';
+            this.dataset.showingStars = 'false';
+            toggleBtn.textContent = '显示';
+            toggleBtn.dataset.showingStars = 'false';
+          }
+        });
+        
+        // 显示提示信息
+        document.getElementById('currentUserLabel').textContent = '已保存用户信息，点击"登录/注册"即可快速登录';
+        document.getElementById('currentUserLabel').style.color = '#28a745';
+        document.getElementById('currentUserLabel').style.fontWeight = 'bold';
+      } else {
+        // 没有保存的密码，隐藏密码输入框
+        document.getElementById('passwordSection').style.display = 'none';
+        document.getElementById('confirmPasswordSection').style.display = 'none';
+      }
+    } else {
+      // 没有保存的用户名，隐藏密码输入框
+      document.getElementById('passwordSection').style.display = 'none';
+      document.getElementById('confirmPasswordSection').style.display = 'none';
+    }
+  }
+  
+  function updateUserNameUI() {
+    const label = document.getElementById('currentUserLabel');
+    if (currentUserName) {
+      label.textContent = '当前用户：' + currentUserName;
+      label.style.color = '';
+      label.style.fontWeight = '';
+    } else {
+      label.textContent = '请输入用户名和密码进行登录或注册';
+      label.style.color = '';
+      label.style.fontWeight = '';
+    }
+  }
+  
+  // 切换密码显示/隐藏（确保在全局作用域）
+  window.togglePasswordVisibility = function() {
+    try {
+      const passwordInput = document.getElementById('inputPassword');
+      const toggleBtn = document.getElementById('togglePasswordBtn');
+      
+      if (!passwordInput || !toggleBtn) {
+        console.error('密码输入框或按钮未找到');
+        return;
+      }
+      
+      const savedPasswordHashed = passwordInput.dataset.savedPasswordHashed; // 哈希后的密码（用于验证）
+      const savedPasswordPlain = passwordInput.dataset.savedPasswordPlain; // 原始密码（用于显示）
+      const showingStars = passwordInput.dataset.showingStars === 'true';
+      
+      // 调试日志
+      appLog('切换密码显示 - showingStars: ' + showingStars + ', savedPasswordPlain: ' + (savedPasswordPlain ? '有' : '无'), 'info');
+      
+      if (showingStars || passwordInput.value === '********') {
+        // 当前显示星号，点击后显示原始密码
+        const plainToShow = savedPasswordPlain || localStorage.getItem('aa_user_password_plain');
+        if (plainToShow) {
+          passwordInput.type = 'text';
+          passwordInput.value = plainToShow; // 始终显示原始密码
+          passwordInput.dataset.savedPasswordPlain = plainToShow; // 更新 dataset
+          passwordInput.dataset.showingStars = 'false';
+          toggleBtn.textContent = '隐藏';
+          toggleBtn.dataset.showingStars = 'false';
+          appLog('显示原始密码', 'info');
+        } else {
+          appLog('错误：没有找到原始密码', 'error');
+          showGlobalMessage('未找到保存的密码', 'error');
+        }
+      } else if (passwordInput.type === 'password') {
+        // 当前是密码类型（隐藏），改为文本类型（显示）
+        passwordInput.type = 'text';
+        toggleBtn.textContent = '隐藏';
+      } else {
+        // 当前是文本类型（显示），改为密码类型（隐藏）或改回星号
+        const currentPlain = savedPasswordPlain || localStorage.getItem('aa_user_password_plain');
+        if (passwordInput.value === currentPlain && currentPlain) {
+          // 如果当前显示的是保存的原始密码，改回星号
+          passwordInput.type = 'text';
+          passwordInput.value = '********';
+          passwordInput.dataset.showingStars = 'true';
+          toggleBtn.textContent = '显示';
+          toggleBtn.dataset.showingStars = 'true';
+        } else {
+          // 否则改为密码类型
+          passwordInput.type = 'password';
+          toggleBtn.textContent = '显示';
+        }
+      }
+    } catch (e) {
+      console.error('切换密码显示时出错:', e);
+      appLog('切换密码显示时出错: ' + e.message, 'error');
+    }
+  };
+  
+  // 同时定义普通函数（兼容性）
+  function togglePasswordVisibility() {
+    window.togglePasswordVisibility();
+  }
+  
+  // 尝试自动快速登录（已废弃，不再使用）
+  // 现在改为用户点击按钮后才登录
+  
+  // 处理登录/注册
+  async function handleLoginOrRegister() {
+    const userName = document.getElementById('inputUserName').value.trim();
+    const passwordInput = document.getElementById('inputPassword');
+    const password = passwordInput.value;
+    const confirmPassword = document.getElementById('inputConfirmPassword').value;
+    
+    if (!userName) {
+      showGlobalMessage('请输入用户名', 'error');
+      return;
+    }
+    
+    if (!db) {
+      showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
+      return;
+    }
+    
+    try {
+      appLog('=== 开始登录/注册流程 ===', 'info');
+      appLog('用户名: ' + userName, 'info');
+      
+      // 检查用户名是否已存在
+      const existingUserRes = await db.collection('users')
+        .where({ name: userName })
+        .limit(1)
+        .get();
+      
+      const userExists = existingUserRes.data && existingUserRes.data.length > 0;
+      
+      if (userExists) {
+        // 用户已存在，执行登录流程
+        appLog('用户已存在，执行登录流程', 'info');
+        
+        const existingUser = existingUserRes.data[0];
+        
+        // 检查本地是否保存了密码
+        const savedPasswordHashed = localStorage.getItem('aa_user_password'); // 哈希后的密码（用于验证）
+        const savedPasswordPlain = localStorage.getItem('aa_user_password_plain'); // 原始密码（用于显示）
+        const savedUserName = localStorage.getItem('aa_user_name');
+        
+        // 判断使用哪个密码：
+        // 1. 如果密码输入框是********且本地有保存的密码，使用本地保存的哈希密码
+        // 2. 如果密码输入框显示的是原始密码，需要先哈希
+        // 3. 否则使用用户输入的密码（需要哈希）
+        let passwordToUse = null;
+        let plainPasswordToSave = null; // 用于保存的原始密码
+        
+        if (password === '********' && passwordInput.dataset.hasSavedPassword === 'true' && savedPasswordHashed && savedUserName === userName) {
+          // 使用本地保存的哈希密码
+          passwordToUse = savedPasswordHashed;
+          plainPasswordToSave = savedPasswordPlain; // 保持原始密码不变
+          appLog('检测到密码输入框为星号，使用本地保存的哈希密码', 'info');
+        } else if (!password && savedPasswordHashed && savedUserName === userName) {
+          // 如果密码输入框为空，但本地有保存的密码，使用保存的哈希密码
+          passwordToUse = savedPasswordHashed;
+          plainPasswordToSave = savedPasswordPlain; // 保持原始密码不变
+          appLog('密码输入框为空，使用本地保存的哈希密码', 'info');
+        } else if (password) {
+          // 用户输入了密码（可能是原始密码或显示出来的原始密码）
+          // 检查是否是保存的原始密码
+          if (password === savedPasswordPlain && savedPasswordPlain) {
+            // 用户输入的是保存的原始密码，使用保存的哈希密码
+            passwordToUse = savedPasswordHashed;
+            plainPasswordToSave = savedPasswordPlain;
+            appLog('用户输入的是保存的原始密码，使用保存的哈希密码', 'info');
+          } else {
+            // 用户输入了新密码，需要哈希
+            passwordToUse = hashPassword(password);
+            plainPasswordToSave = password; // 保存原始密码
+            appLog('使用用户输入的新密码（已哈希）', 'info');
+          }
+        } else {
+          // 没有密码，需要用户输入
+          document.getElementById('passwordSection').style.display = 'block';
+          document.getElementById('confirmPasswordSection').style.display = 'none';
+          document.getElementById('currentUserLabel').textContent = '该用户名已注册，请输入密码登录';
+          document.getElementById('currentUserLabel').style.color = '#007bff';
+          document.getElementById('currentUserLabel').style.fontWeight = 'bold';
+          document.getElementById('inputPassword').focus();
+          showGlobalMessage('请输入密码', 'error');
+          return;
+        }
+        
+        // 验证密码（使用哈希后的密码）
+        if (existingUser.password === passwordToUse) {
+          // 密码正确，登录成功
+          appLog('密码验证成功，登录成功', 'success');
+          currentUserName = userName;
+          // 重置该用户名的错误计数
+          passwordErrorCount[userName] = 0;
+          
+          // 保存用户名和密码到本地（同时保存原始密码和哈希后的密码）
+          localStorage.setItem('aa_user_name', userName);
+          localStorage.setItem('aa_user_password', passwordToUse); // 哈希后的密码（用于验证）
+          if (plainPasswordToSave) {
+            localStorage.setItem('aa_user_password_plain', plainPasswordToSave); // 原始密码（用于显示）
+          }
+          
+          // 显示当前用户信息（在活动列表页面顶部）
+          // 先检查是否已经存在用户信息显示区域
+          let userInfoDiv = document.getElementById('userInfoDisplay');
+          if (!userInfoDiv) {
+            userInfoDiv = document.createElement('div');
+            userInfoDiv.id = 'userInfoDisplay';
+            userInfoDiv.className = 'card';
+            userInfoDiv.style.marginBottom = '12px';
+            const screenHome = document.getElementById('screenHome');
+            screenHome.insertBefore(userInfoDiv, screenHome.firstChild);
+          }
+          userInfoDiv.innerHTML = '<div style="text-align:center;"><strong style="color:#28a745;">当前用户：' + currentUserName + '</strong></div>';
+          
+          document.getElementById('currentUserLabel').textContent = '当前用户：' + currentUserName;
+          document.getElementById('currentUserLabel').style.color = '';
+          document.getElementById('currentUserLabel').style.fontWeight = '';
+          document.getElementById('passwordSection').style.display = 'none';
+          document.getElementById('confirmPasswordSection').style.display = 'none';
+          document.getElementById('inputPassword').value = '';
+          document.getElementById('inputConfirmPassword').value = '';
+          
+          showGlobalMessage('登录成功！');
+          appLog('=== 登录成功 ===', 'success');
+          
+          // 隐藏登录界面，显示活动列表页面
+          document.getElementById('userCard').style.display = 'none';
+          document.getElementById('screenHome').classList.remove('hidden');
+          // 加载活动列表
+          if (db) {
+            await loadActivities();
+          }
+        } else {
+          // 密码错误
+          // 增加错误计数
+          if (!passwordErrorCount[userName]) {
+            passwordErrorCount[userName] = 0;
+          }
+          passwordErrorCount[userName]++;
+          
+          const errorCount = passwordErrorCount[userName];
+          appLog('密码验证失败，错误次数: ' + errorCount, 'error');
+          
+          if (errorCount >= 3) {
+            // 错误3次，提示用户该用户名可能已存在
+            showGlobalMessage('密码错误3次。该用户名可能已被他人使用，请更换用户名（如：' + userName + '123）后重新注册', 'error');
+            appLog('密码错误3次，提示用户更换用户名', 'warning');
+            
+            // 重置错误计数
+            passwordErrorCount[userName] = 0;
+            
+            // 清空输入，让用户重新输入用户名
+            document.getElementById('inputUserName').value = '';
+            document.getElementById('inputPassword').value = '';
+            document.getElementById('inputConfirmPassword').value = '';
+            document.getElementById('passwordSection').style.display = 'none';
+            document.getElementById('confirmPasswordSection').style.display = 'none';
+            document.getElementById('inputUserName').focus();
+          } else {
+            // 错误次数未达3次
+            const remaining = 3 - errorCount;
+            showGlobalMessage('密码错误，请重新输入（还可尝试 ' + remaining + ' 次）', 'error');
+            document.getElementById('inputPassword').value = '';
+            document.getElementById('inputPassword').focus();
+          }
+        }
+      } else {
+        // 用户不存在，执行注册流程
+        appLog('用户不存在，执行注册流程', 'info');
+        
+        // 重置该用户名的错误计数（如果之前有记录）
+        if (passwordErrorCount[userName]) {
+          passwordErrorCount[userName] = 0;
+        }
+        
+        // 显示注册提示信息
+        document.getElementById('currentUserLabel').textContent = '该用户名未注册，请设置密码完成注册';
+        document.getElementById('currentUserLabel').style.color = '#28a745';
+        document.getElementById('currentUserLabel').style.fontWeight = 'bold';
+        
+        // 显示密码和确认密码输入框
+        document.getElementById('passwordSection').style.display = 'block';
+        document.getElementById('confirmPasswordSection').style.display = 'block';
+        
+        if (!password) {
+          document.getElementById('inputPassword').focus();
+          showGlobalMessage('欢迎注册！请设置密码（至少6位）', 'success');
+          return;
+        }
+        
+        if (password.length < 6) {
+          showGlobalMessage('密码长度至少6位', 'error');
+          return;
+        }
+        
+        if (!confirmPassword) {
+          document.getElementById('inputConfirmPassword').focus();
+          showGlobalMessage('请确认密码', 'error');
+          return;
+        }
+        
+        if (password !== confirmPassword) {
+          showGlobalMessage('两次输入的密码不一致', 'error');
+          document.getElementById('inputConfirmPassword').value = '';
+          document.getElementById('inputConfirmPassword').focus();
+          return;
+        }
+        
+        // 创建新用户
+        const hashedPassword = hashPassword(password);
+        await db.collection('users').add({
+          name: userName,
+          password: hashedPassword,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        appLog('用户注册成功', 'success');
+        currentUserName = userName;
+        // 重置该用户名的错误计数
+        passwordErrorCount[userName] = 0;
+        // 同时保存原始密码和哈希后的密码
+        localStorage.setItem('aa_user_name', userName);
+        localStorage.setItem('aa_user_password', hashedPassword); // 哈希后的密码（用于验证）
+        localStorage.setItem('aa_user_password_plain', password); // 原始密码（用于显示）
+        
+        // 显示当前用户信息（在活动列表页面顶部）
+        let userInfoDiv = document.getElementById('userInfoDisplay');
+        if (!userInfoDiv) {
+          userInfoDiv = document.createElement('div');
+          userInfoDiv.id = 'userInfoDisplay';
+          userInfoDiv.className = 'card';
+          userInfoDiv.style.marginBottom = '12px';
+          const screenHome = document.getElementById('screenHome');
+          screenHome.insertBefore(userInfoDiv, screenHome.firstChild);
+        }
+        userInfoDiv.innerHTML = '<div style="text-align:center;"><strong style="color:#28a745;">当前用户：' + currentUserName + '</strong></div>';
+        
+        document.getElementById('currentUserLabel').textContent = '当前用户：' + currentUserName;
+        document.getElementById('currentUserLabel').style.color = '';
+        document.getElementById('currentUserLabel').style.fontWeight = '';
+        document.getElementById('passwordSection').style.display = 'none';
+        document.getElementById('confirmPasswordSection').style.display = 'none';
+        document.getElementById('inputPassword').value = '';
+        document.getElementById('inputConfirmPassword').value = '';
+        
+        showGlobalMessage('注册成功！');
+        appLog('=== 注册成功 ===', 'success');
+        
+        // 隐藏登录界面，显示活动列表页面
+        document.getElementById('userCard').style.display = 'none';
+        document.getElementById('screenHome').classList.remove('hidden');
+        // 加载活动列表
+        if (db) {
+          await loadActivities();
+        }
+      }
+    } catch (e) {
+      const errorDetails = extractErrorInfo(e);
+      appLog('登录/注册失败: ' + errorDetails.message, 'error');
+      showGlobalMessage('操作失败：' + errorDetails.message + '，请重试', 'error');
+    }
+  }
+
+
+  // ====== 页面切换 ======
+  function backToHome() {
+    document.getElementById('screenHome').classList.remove('hidden');
+    document.getElementById('screenActivity').classList.add('hidden');
+    currentActivity = null;
+  }
+
+  function openActivityScreen() {
+    document.getElementById('screenHome').classList.add('hidden');
+    document.getElementById('screenActivity').classList.remove('hidden');
+  }
+
+  // ====== Modal 控制 ======
+  // 处理活动类型变化
+  function handleActivityTypeChange() {
+    const typeSelect = document.getElementById('actType');
+    const customSection = document.getElementById('customTypeSection');
+    const customInput = document.getElementById('actCustomType');
+    
+    if (typeSelect.value === '自定义') {
+      customSection.style.display = 'block';
+      customInput.focus();
+    } else {
+      customSection.style.display = 'none';
+      customInput.value = '';
+    }
+  }
+  
+  // 加载自定义活动类型
+  async function loadCustomActivityTypes() {
+    if (!db) return;
+    try {
+      const res = await db.collection('customActivityTypes')
+        .orderBy('createdAt', 'desc')
+        .limit(5)
+        .get();
+      customActivityTypes = (res.data || []).map(item => item.type);
+      updateActivityTypeSelect();
+    } catch (e) {
+      appLog('加载自定义活动类型失败: ' + e.message, 'warning');
+    }
+  }
+  
+  // 更新活动类型下拉列表
+  function updateActivityTypeSelect() {
+    const select = document.getElementById('actType');
+    const currentValue = select.value;
+    
+    // 保留固定选项
+    const fixedOptions = ['聚餐', '旅游', '自驾游', '团购', '户外活动', '自定义'];
+    
+    // 清除现有选项（除了固定选项）
+    Array.from(select.options).forEach(opt => {
+      if (!fixedOptions.includes(opt.value)) {
+        opt.remove();
+      }
+    });
+    
+    // 添加自定义类型（在"自定义"选项之前）
+    const customOption = select.querySelector('option[value="自定义"]');
+    customActivityTypes.forEach(type => {
+      const opt = document.createElement('option');
+      opt.value = type;
+      opt.textContent = type;
+      select.insertBefore(opt, customOption);
+    });
+    
+    // 恢复之前选中的值
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  }
+  
+  // 添加活动成员输入行
+  function addActivityMemberRow(container, name = '') {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.marginBottom = '8px';
+    row.style.alignItems = 'center';
+    
+    // 名字输入框
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = '输入成员姓名';
+    nameInput.value = name;
+    nameInput.style.flex = '1';
+    nameInput.style.marginRight = '8px';
+    nameInput.style.marginTop = '0';
+    nameInput.style.marginBottom = '0';
+    
+    // 删除按钮
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn btn-secondary';
+    deleteBtn.textContent = '删除';
+    deleteBtn.style.padding = '4px 8px';
+    deleteBtn.style.fontSize = '12px';
+    deleteBtn.onclick = function() {
+      row.remove();
+    };
+    
+    row.appendChild(nameInput);
+    row.appendChild(deleteBtn);
+    container.appendChild(row);
+  }
+  
+  // 添加新的活动成员
+  function addActivityMember() {
+    const container = document.getElementById('actMembersContainer');
+    addActivityMemberRow(container, '');
+  }
+  
+  async function showCreateActivityModal() {
+    const m = document.getElementById('modalActivity');
+    document.getElementById('actName').value = '';
+    document.getElementById('actType').value = '聚餐';
+    const membersContainer = document.getElementById('actMembersContainer');
+    membersContainer.innerHTML = '';
+    
+    // 从用户已参与的其他活动中加载成员
+    const memberSet = new Set(); // 使用Set去重
+    
+    // 默认添加当前用户
+    if (currentUserName) {
+      memberSet.add(currentUserName);
+    }
+    
+    // 查询用户已参与的活动
+    if (db && currentUserName) {
+      try {
+        // 查询所有活动
+        const res = await db.collection('activities')
+          .orderBy('createdAt', 'desc')
+          .limit(50)
+          .get();
+        const allActivities = res.data || [];
+        
+        // 筛选出当前用户参与的活动
+        const userActivities = allActivities.filter(act => {
+          if (act.memberNames && Array.isArray(act.memberNames)) {
+            return act.memberNames.includes(currentUserName);
+          }
+          const members = act.members || [];
+          return members.some(m => {
+            const memberName = typeof m === 'string' ? m : m.name;
+            return memberName === currentUserName;
+          });
+        });
+        
+        // 从这些活动的groups中收集所有成员
+        for (const act of userActivities) {
+          if (act._id) {
+            try {
+              const groupRes = await db.collection('groups')
+                .where({ activityId: act._id })
+                .limit(1)
+                .get();
+              
+              if (groupRes.data && groupRes.data.length > 0 && groupRes.data[0].members) {
+                groupRes.data[0].members.forEach(member => {
+                  const memberName = typeof member === 'string' ? member : member.name;
+                  if (memberName) {
+                    memberSet.add(memberName);
+                  }
+                });
+              } else {
+                // 如果没有group，使用活动的members（兼容旧数据）
+                (act.members || []).forEach(member => {
+                  const memberName = typeof member === 'string' ? member : member.name;
+                  if (memberName) {
+                    memberSet.add(memberName);
+                  }
+                });
+              }
+            } catch (e) {
+              appLog('加载活动成员失败: ' + e.message, 'error');
+              // 如果加载失败，使用活动的members（兼容旧数据）
+              (act.members || []).forEach(member => {
+                const memberName = typeof member === 'string' ? member : member.name;
+                if (memberName) {
+                  memberSet.add(memberName);
+                }
+              });
+            }
+          }
+        }
+      } catch (e) {
+        appLog('加载已参与活动成员失败: ' + e.message, 'error');
+      }
+    }
+    
+    // 默认添加所有收集到的成员
+    memberSet.forEach(memberName => {
+      addActivityMemberRow(membersContainer, memberName);
+    });
+    
+    document.getElementById('actRemark').value = '';
+    document.getElementById('actCustomType').value = '';
+    document.getElementById('customTypeSection').style.display = 'none';
+    delete m.dataset.editId; // 清除编辑ID
+    const btn = document.querySelector('#modalActivity button.btn-full');
+    if (btn) btn.textContent = '创建';
+    const header = document.querySelector('#modalActivity h3');
+    if (header) header.textContent = '创建活动';
+    // 加载自定义类型
+    loadCustomActivityTypes();
+    m.style.display = 'flex';
+  }
+  function closeActivityModal() {
+    document.getElementById('modalActivity').style.display = 'none';
+  }
+
+  async function showBillModal() {
+    if (!currentActivity) return;
+    const m = document.getElementById('modalBill');
+    document.getElementById('billAmount').value = '';
+    document.getElementById('billTitle').value = '';
+    document.getElementById('billCategory').value = '';
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset()*60000)
+                    .toISOString().slice(0,16);
+    document.getElementById('billTime').value = local;
+    document.getElementById('billRemark').value = '';
+
+    // 从活动的group中加载成员
+    let activityMembers = currentActivity.members || [];
+    
+    if (db && currentActivity._id) {
+      try {
+        const groupRes = await db.collection('groups')
+          .where({ activityId: currentActivity._id })
+          .limit(1)
+          .get();
+        
+        if (groupRes.data && groupRes.data.length > 0 && groupRes.data[0].members) {
+          // 从group中加载成员
+          activityMembers = groupRes.data[0].members;
+        }
+      } catch (e) {
+        appLog('加载活动成员失败: ' + e.message, 'error');
+      }
+    }
+
+    // 付款人列表
+    const payerSelect = document.getElementById('billPayer');
+    payerSelect.innerHTML = '';
+    activityMembers.forEach(mb => {
+      const opt = document.createElement('option');
+      opt.value = mb.name;
+      opt.textContent = mb.name;
+      if (mb.name === currentUserName) opt.selected = true;
+      payerSelect.appendChild(opt);
+    });
+
+    // 参与成员 + 权重（从活动的group中加载）
+    const container = document.getElementById('billParticipants');
+    container.innerHTML = '';
+    activityMembers.forEach(mb => {
+      const memberName = typeof mb === 'string' ? mb : mb.name;
+      addBillParticipantRow(container, memberName, 2); // 费用添加时默认权重为2
+    });
+
+    m.style.display = 'flex';
+  }
+  function closeBillModal() {
+    document.getElementById('modalBill').style.display = 'none';
+  }
+  
+  // 添加参与人输入行
+  function addBillParticipantRow(container, name = '', weight = 2) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.marginBottom = '8px';
+    row.style.alignItems = 'center';
+    row.style.gap = '8px';
+    
+    // 名字输入框（第一列，确保完整显示）
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = '输入参与人名字';
+    nameInput.value = name;
+    nameInput.style.flex = '1';
+    nameInput.style.minWidth = '120px'; // 确保姓名列有足够宽度
+    nameInput.style.marginTop = '0';
+    nameInput.style.marginBottom = '0';
+    
+    // 权重选择（使用单选框）
+    const weightContainer = document.createElement('div');
+    weightContainer.style.display = 'flex';
+    weightContainer.style.alignItems = 'center';
+    weightContainer.style.gap = '4px';
+    weightContainer.style.flexShrink = '0'; // 防止被压缩
+    
+    // 使用时间戳确保每个参与人行的单选框组是唯一的
+    const uniqueId = 'weight_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    [0, 1, 2, 3].forEach(w => {
+      const radioGroup = document.createElement('div');
+      radioGroup.style.display = 'flex';
+      radioGroup.style.alignItems = 'center';
+      radioGroup.style.marginRight = '4px';
+      
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = uniqueId; // 使用唯一名称，确保同一行的单选框是一组
+      radio.value = w;
+      radio.id = uniqueId + '_' + w;
+      if (w === weight) radio.checked = true;
+      
+      const label = document.createElement('label');
+      label.htmlFor = radio.id;
+      label.textContent = String(w); // 直接显示 0, 1, 2, 3
+      label.style.marginLeft = '2px';
+      label.style.fontSize = '12px';
+      label.style.cursor = 'pointer';
+      
+      radioGroup.appendChild(radio);
+      radioGroup.appendChild(label);
+      weightContainer.appendChild(radioGroup);
+    });
+    
+    // 删除按钮
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn btn-secondary';
+    deleteBtn.textContent = '删除';
+    deleteBtn.style.padding = '4px 8px';
+    deleteBtn.style.fontSize = '12px';
+    deleteBtn.style.flexShrink = '0'; // 防止被压缩
+    deleteBtn.onclick = function() {
+      row.remove();
+    };
+    
+    row.appendChild(nameInput);
+    row.appendChild(weightContainer);
+    row.appendChild(deleteBtn);
+    container.appendChild(row);
+  }
+  
+  // 添加新的参与人
+  function addBillParticipant() {
+    const container = document.getElementById('billParticipants');
+    addBillParticipantRow(container, '', 2);
+  }
+
+
+  // ====== 创建/更新活动 ======
+  async function createActivity() {
+    if (!db) {
+      showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
+      return;
+    }
+
+    const name = document.getElementById('actName').value.trim();
+    if (!name) {
+      showGlobalMessage('活动名称不能为空', 'error');
+      return;
+    }
+    let type = document.getElementById('actType').value;
+    const customType = document.getElementById('actCustomType').value.trim();
+    
+    // 如果选择了"自定义"，使用自定义输入框的值
+    if (type === '自定义') {
+      if (!customType) {
+        showGlobalMessage('请输入自定义活动类型', 'error');
+        document.getElementById('actCustomType').focus();
+        return;
+      }
+      type = customType;
+      
+      // 检查自定义类型是否已存在
+      const typeExists = customActivityTypes.includes(customType);
+      if (!typeExists) {
+        // 检查是否已达到5个限制
+        if (customActivityTypes.length >= 5) {
+          showGlobalMessage('自定义类型最多只能保存5个，请先删除一些旧的自定义类型', 'error');
+          return;
+        }
+        
+        // 保存新的自定义类型到数据库
+        try {
+          await db.collection('customActivityTypes').add({
+            type: customType,
+            createdAt: new Date()
+          });
+          customActivityTypes.unshift(customType); // 添加到列表开头
+          // 如果超过5个，移除最旧的
+          if (customActivityTypes.length > 5) {
+            customActivityTypes = customActivityTypes.slice(0, 5);
+          }
+          updateActivityTypeSelect();
+        } catch (e) {
+          appLog('保存自定义类型失败: ' + e.message, 'warning');
+        }
+      }
+    }
+    
+    const remark = document.getElementById('actRemark').value.trim();
+    
+    // 从成员输入框中收集成员信息
+    const membersContainer = document.getElementById('actMembersContainer');
+    const memberRows = membersContainer.querySelectorAll('div.row');
+    const members = [];
+    
+    for (const row of memberRows) {
+      const nameInput = row.querySelector('input[type="text"]');
+      
+      if (nameInput) {
+        const memberName = nameInput.value.trim();
+        
+        if (memberName) {
+          members.push({
+            name: memberName,
+            active: true
+          });
+        }
+      }
+    }
+    
+    if (members.length === 0) {
+      showGlobalMessage('请至少添加一个成员', 'error');
+      return;
+    }
+    
+    // 添加成员名称数组，方便查询用户参与的活动
+    const memberNames = members.map(m => m.name);
+
+    try {
+      const m = document.getElementById('modalActivity');
+      const editId = m.dataset.editId;
+      
+      if (editId) {
+        // 更新活动
+        await db.collection('activities').doc(editId).update({
+          name, type, remark, members, memberNames,
+          updatedAt: new Date()
+        });
+        
+        // 更新活动的group
+        const groupRes = await db.collection('groups')
+          .where({ activityId: editId })
+          .limit(1)
+          .get();
+        
+        if (groupRes.data && groupRes.data.length > 0) {
+          // 更新现有group
+          await db.collection('groups').doc(groupRes.data[0]._id).update({
+            members: members,
+            updatedAt: new Date()
+          });
+        } else {
+          // 创建新group
+          await db.collection('groups').add({
+            activityId: editId,
+            members: members,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        }
+        
+        delete m.dataset.editId;
+        closeActivityModal();
+        showGlobalMessage('活动已更新');
+        // 如果当前正在查看这个活动，刷新数据
+        if (currentActivity && currentActivity._id === editId) {
+          currentActivity = { ...currentActivity, name, type, remark, members, memberNames };
+          document.getElementById('activityTitle').textContent = name;
+          document.getElementById('activityMeta').textContent =
+            (type || '') + ' | 成员：' + members.map(m=>m.name).join('、');
+          await reloadActivityData();
+        }
+      } else {
+        // 创建活动
+        const actRes = await db.collection('activities').add({
+          name, type, remark, members, memberNames,
+          createdAt: new Date()
+        });
+        
+        // 创建活动的group
+        await db.collection('groups').add({
+          activityId: actRes.id,
+          members: members,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        closeActivityModal();
+        showGlobalMessage('活动创建成功');
+      }
+      await loadActivities();
+    } catch (e) {
+      appLog('保存活动失败: ' + e.message, 'error');
+      showGlobalMessage('保存活动失败：' + e.message, 'error');
+    }
+  }
+
+  // ====== 加载活动列表 ======
+  async function loadActivities() {
+    const listDiv = document.getElementById('activityList');
+    
+    // 检查用户是否已登录
+    if (!currentUserName) {
+      listDiv.textContent = '请先登录以查看您参与的活动';
+      return;
+    }
+    
+    if (!db) {
+      listDiv.textContent = '数据库未初始化，请等待...';
+      return;
+    }
+    
+    listDiv.textContent = '加载中...';
+    try {
+      appLog('开始加载活动列表，当前用户: ' + currentUserName, 'info');
+      
+      // 查询所有活动，然后在客户端筛选
+      // 注意：已添加 memberNames 字段用于更高效的筛选
+      const res = await db.collection('activities')
+        .orderBy('createdAt','desc')
+        .limit(50)
+        .get();
+      const allActivities = res.data || [];
+      
+      appLog('查询到 ' + allActivities.length + ' 个活动，开始筛选', 'info');
+      
+      // 筛选出当前用户参与的活动
+      // 优先使用 memberNames 字段（如果存在），否则使用 members 数组
+      const userActivities = allActivities.filter(act => {
+        // 优先使用 memberNames 字段（新增字段，用于快速筛选）
+        if (act.memberNames && Array.isArray(act.memberNames)) {
+          return act.memberNames.includes(currentUserName);
+        }
+        // 兼容旧数据：如果没有 memberNames 字段，使用 members 数组
+        const members = act.members || [];
+        return members.some(m => m.name === currentUserName);
+      });
+      
+      appLog('当前用户参与的活动: ' + userActivities.length + ' 个', 'info');
+      
+      if (!userActivities.length) {
+        listDiv.textContent = '您还没有参与任何活动，请先创建或等待被邀请。';
+        return;
+      }
+      
+      listDiv.innerHTML = '';
+      userActivities.forEach(act => {
+        const div = document.createElement('div');
+        div.className = 'activity-item';
+        const members = (act.members || []).map(m=>m.name).join('、');
+        div.innerHTML = `
+          <div class="row" style="align-items: center;">
+            <div style="flex: 1; cursor: pointer;" onclick="openActivity(${JSON.stringify(act).replace(/"/g, '&quot;')})">
+              <div><strong>${act.name}</strong></div>
+              <div class="small">
+                <span class="tag">${act.type || ''}</span>
+                成员：${members}
+              </div>
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button class="btn btn-secondary" onclick="event.stopPropagation(); editActivity(${JSON.stringify(act).replace(/"/g, '&quot;')})" style="padding: 4px 8px; font-size: 12px;">编辑</button>
+              <button class="btn btn-secondary" onclick="event.stopPropagation(); deleteActivity('${act._id}', '${act.name}')" style="padding: 4px 8px; font-size: 12px; background: #c5221f;">删除</button>
+            </div>
+          </div>
+        `;
+        listDiv.appendChild(div);
+      });
+      
+      appLog('活动列表加载完成', 'success');
+    } catch (e) {
+      appLog('加载活动列表失败: ' + e.message, 'error');
+      listDiv.textContent = '加载失败：' + e.message;
+    }
+  }
+
+  // ====== 打开活动详情 ======
+  async function openActivity(actDoc) {
+    // 如果传入的是字符串（JSON），需要解析
+    if (typeof actDoc === 'string') {
+      try {
+        actDoc = JSON.parse(actDoc.replace(/&quot;/g, '"'));
+      } catch (e) {
+        console.error('解析活动数据失败:', e);
+        return;
+      }
+    }
+    currentActivity = actDoc;
+    openActivityScreen();
+    document.getElementById('activityTitle').textContent = actDoc.name;
+    document.getElementById('activityMeta').textContent =
+      (actDoc.type || '') + ' | 成员：' + (actDoc.members || []).map(m=>m.name).join('、');
+    await reloadActivityData();
+  }
+  
+  // ====== 编辑活动 ======
+  async function editActivity(actDoc) {
+    // 如果传入的是字符串（JSON），需要解析
+    if (typeof actDoc === 'string') {
+      try {
+        actDoc = JSON.parse(actDoc.replace(/&quot;/g, '"'));
+      } catch (e) {
+        console.error('解析活动数据失败:', e);
+        return;
+      }
+    }
+    const m = document.getElementById('modalActivity');
+    document.getElementById('actName').value = actDoc.name || '';
+    
+    // 检查类型是否是自定义类型
+    const fixedTypes = ['聚餐', '旅游', '自驾游', '团购', '户外活动'];
+    const type = actDoc.type || '聚餐';
+    if (fixedTypes.includes(type)) {
+      document.getElementById('actType').value = type;
+      document.getElementById('customTypeSection').style.display = 'none';
+      document.getElementById('actCustomType').value = '';
+    } else {
+      // 是自定义类型
+      document.getElementById('actType').value = '自定义';
+      document.getElementById('customTypeSection').style.display = 'block';
+      document.getElementById('actCustomType').value = type;
+    }
+    
+    // 从group中加载成员
+    const membersContainer = document.getElementById('actMembersContainer');
+    membersContainer.innerHTML = '';
+    
+    if (db && actDoc._id) {
+      try {
+        const groupRes = await db.collection('groups')
+          .where({ activityId: actDoc._id })
+          .limit(1)
+          .get();
+        
+        if (groupRes.data && groupRes.data.length > 0 && groupRes.data[0].members) {
+          // 从group中加载成员
+          groupRes.data[0].members.forEach(member => {
+            const memberName = typeof member === 'string' ? member : member.name;
+            addActivityMemberRow(membersContainer, memberName);
+          });
+        } else {
+          // 如果没有group，使用活动的members（兼容旧数据）
+          (actDoc.members || []).forEach(member => {
+            const memberName = typeof member === 'string' ? member : member.name;
+            addActivityMemberRow(membersContainer, memberName);
+          });
+        }
+      } catch (e) {
+        appLog('加载活动成员失败: ' + e.message, 'error');
+        // 如果加载失败，使用活动的members（兼容旧数据）
+        (actDoc.members || []).forEach(member => {
+          const memberName = typeof member === 'string' ? member : member.name;
+          addActivityMemberRow(membersContainer, memberName);
+        });
+      }
+    } else {
+      // 如果没有数据库或活动ID，使用活动的members（兼容旧数据）
+      (actDoc.members || []).forEach(member => {
+        const memberName = typeof member === 'string' ? member : member.name;
+        addActivityMemberRow(membersContainer, memberName);
+      });
+    }
+    
+    document.getElementById('actRemark').value = actDoc.remark || '';
+    // 保存活动ID用于更新
+    m.dataset.editId = actDoc._id;
+    // 更新按钮和标题文本
+    const btn = document.querySelector('#modalActivity button.btn-full');
+    if (btn) btn.textContent = '更新';
+    const header = document.querySelector('#modalActivity h3');
+    if (header) header.textContent = '编辑活动';
+    // 加载自定义类型
+    loadCustomActivityTypes();
+    m.style.display = 'flex';
+  }
+  
+  // ====== 自定义确认对话框 ======
+  function showConfirmDialog(message, onConfirm) {
+    const modal = document.getElementById('confirmDeleteModal');
+    const messageEl = document.getElementById('confirmDeleteMessage');
+    const cancelBtn = document.getElementById('confirmDeleteCancel');
+    const okBtn = document.getElementById('confirmDeleteOk');
+    
+    messageEl.textContent = message;
+    modal.style.display = 'flex';
+    
+    // 清除之前的事件监听器
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    const newOkBtn = okBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+    
+    // 添加新的事件监听器
+    newCancelBtn.onclick = function() {
+      modal.style.display = 'none';
+    };
+    
+    newOkBtn.onclick = function() {
+      modal.style.display = 'none';
+      if (onConfirm) {
+        onConfirm();
+      }
+    };
+  }
+  
+  // ====== 删除活动 ======
+  async function deleteActivity(actId, actName) {
+    showConfirmDialog(`确定要删除活动"${actName}"吗？此操作不可恢复！`, async function() {
+      if (!db) {
+        showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
+        return;
+      }
+      try {
+        await db.collection('activities').doc(actId).remove();
+        
+        // 删除活动的group
+        const groupRes = await db.collection('groups')
+          .where({ activityId: actId })
+          .limit(1)
+          .get();
+        if (groupRes.data && groupRes.data.length > 0) {
+          await db.collection('groups').doc(groupRes.data[0]._id).remove();
+        }
+        
+        showGlobalMessage('活动已删除');
+        await loadActivities();
+      } catch (e) {
+        appLog('删除活动失败: ' + e.message, 'error');
+        showGlobalMessage('删除活动失败：' + e.message, 'error');
+      }
+    });
+  }
+
+  async function reloadActivityData() {
+    if (!currentActivity) return;
+    if (!db) {
+      showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
+      return;
+    }
+    const actId = currentActivity._id;
+
+    try {
+      // 加载活动的group信息
+      const groupRes = await db.collection('groups')
+        .where({ activityId: actId })
+        .limit(1)
+        .get();
+      
+      if (groupRes.data && groupRes.data.length > 0 && groupRes.data[0].members) {
+        // 更新当前活动的members为group中的members
+        currentActivity.members = groupRes.data[0].members;
+        // 更新活动显示
+        document.getElementById('activityMeta').textContent =
+          (currentActivity.type || '') + ' | 成员：' + currentActivity.members.map(m=>m.name).join('、');
+      }
+      
+      // 账单
+      const billRes = await db.collection('bills')
+        .where({ activityId: actId })
+        .orderBy('createdAt','desc')
+        .limit(500)
+        .get();
+      currentActivityBills = billRes.data || [];
+
+
+      // 计算余额
+      currentActivityBalances = calcBalancesForActivity();
+
+      renderBills();
+      renderMembers();
+      renderSummary();
+    } catch (e) {
+      console.error('加载活动数据失败:', e);
+      showGlobalMessage('加载数据失败：' + e.message, 'error');
+    }
+  }
+
+  // 获取姓氏颜色（为不同姓氏分配不同颜色）
+  const surnameColors = [
+    '#4EC9B0', // 青色
+    '#569CD6', // 蓝色
+    '#CE9178', // 橙色
+    '#DCDCAA', // 黄色
+    '#C586C0', // 紫色
+    '#9CDCFE', // 浅蓝色
+    '#D7BA7D', // 金色
+    '#F48771', // 红色
+    '#85C1E2', // 天蓝色
+    '#A8CE93'  // 绿色
+  ];
+  
+  function getSurnameColor(surname) {
+    // 根据姓氏的Unicode值分配颜色，确保相同姓氏总是相同颜色
+    const index = surname.charCodeAt(0) % surnameColors.length;
+    return surnameColors[index];
+  }
+  
+  // 提取姓氏（取第一个字符）
+  function getSurname(name) {
+    if (!name || name.length === 0) return '';
+    return name.charAt(0);
+  }
+  
+  // ====== 费用渲染 ======
+  function renderBills() {
+    const div = document.getElementById('billList');
+    if (!currentActivityBills.length) {
+      div.innerHTML = '<div class="small">暂无费用记录</div>';
+      return;
+    }
+    div.innerHTML = '';
+    currentActivityBills.forEach(b => {
+      // 只显示费用名称
+      const billTitle = b.title || '未命名';
+      
+      // 统计参与人员的姓氏和总人数
+      let participantsHtml = '';
+      let totalCount = 0;
+      
+      if (b.participants) {
+        // 按姓氏分组统计
+        const surnameMap = {};
+        Object.keys(b.participants).forEach(name => {
+          const weight = b.participants[name] || 0;
+          if (weight > 0) {
+            const surname = getSurname(name);
+            if (!surnameMap[surname]) {
+              surnameMap[surname] = 0;
+            }
+            surnameMap[surname] += weight;
+            totalCount += weight;
+          }
+        });
+        
+        // 获取所有姓氏，只显示前3个
+        const surnames = Object.keys(surnameMap);
+        const maxDisplay = 3; // 最多显示3个圆
+        
+        // 只显示前3个姓氏的圆
+        const displayedSurnames = surnames.slice(0, maxDisplay);
+        const remainingCount = surnames.length > maxDisplay ? surnames.slice(maxDisplay).reduce((sum, s) => sum + surnameMap[s], 0) : 0;
+        
+        // 生成姓氏圆（挤一挤，放在一行）
+        const surnameCircles = displayedSurnames.map(surname => {
+          const color = getSurnameColor(surname);
+          return `
+            <span style="
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              background-color: ${color};
+              color: white;
+              font-weight: bold;
+              font-size: 14px;
+              margin-right: 2px;
+              flex-shrink: 0;
+            ">${surname}</span>
+          `;
+        }).join('');
+        
+        // 如果有超过3个姓氏，显示+N
+        let extraInfo = '';
+        if (remainingCount > 0) {
+          extraInfo = `<span style="font-size: 12px; color: #666; margin-left: 4px;">+${remainingCount}</span>`;
+        }
+        
+        participantsHtml = surnameCircles + extraInfo || '<span class="small">无参与成员</span>';
+      } else {
+        participantsHtml = '<span class="small">无参与成员</span>';
+      }
+      
+      const billDiv = document.createElement('div');
+      billDiv.className = 'bill-item';
+      billDiv.innerHTML = `
+        <div class="row">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 2px;">
+                ${participantsHtml}
+              </div>
+            </div>
+            <div style="margin-bottom: 4px;">
+              <strong style="font-size: 15px;">${billTitle}</strong>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+            <div style="font-size: 16px; font-weight: bold; color: #137333;">
+              ¥${Number(b.amount || 0).toFixed(2)}
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button class="btn btn-secondary" onclick="editBill(${JSON.stringify(b).replace(/"/g, '&quot;')})" style="padding: 4px 8px; font-size: 12px;">编辑</button>
+              <button class="btn btn-secondary" onclick="deleteBill('${b._id}', '${(b.title || '未命名').replace(/'/g, "\\'")}')" style="padding: 4px 8px; font-size: 12px; background: #c5221f;">删除</button>
+            </div>
+          </div>
+        </div>
+      `;
+      div.appendChild(billDiv);
+    });
+  }
+
+  // ====== 成员+余额渲染 ======
+  function renderMembers() {
+    const div = document.getElementById('memberList');
+    const members = currentActivity.members || [];
+    if (!members.length) {
+      div.innerHTML = '<div class="small">无成员</div>';
+      return;
+    }
+    div.innerHTML = '';
+    members.forEach(mb => {
+      const name = mb.name;
+      const bal = currentActivityBalances[name] || { paid:0, shouldPay:0, balance:0 };
+      const row = document.createElement('div');
+      row.className = 'member-row';
+      const isMe = (name === currentUserName);
+      row.innerHTML = `
+        <div>
+          <div>${name}${isMe ? '（我）':''}</div>
+          <div class="small">
+            权重：${mb.weight || 2} 人 |
+            实付：¥${bal.paid.toFixed(2)} |
+            应付：¥${bal.shouldPay.toFixed(2)}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:13px;${bal.balance<0?'color:#c5221f':'color:#137333'}">
+            余额：¥${bal.balance.toFixed(2)}
+          </div>
+        </div>
+      `;
+      div.appendChild(row);
+    });
+  }
+
+  // ====== 结算 TAB 渲染 ======
+  function renderSummary() {
+    const div = document.getElementById('summaryContent');
+    const bills = currentActivityBills;
+    const members = currentActivity.members || [];
+
+    if (!bills.length) {
+      div.innerHTML = '<div class="small">暂无费用记录</div>';
+      return;
+    }
+
+    const total = bills.reduce((s,b)=>s+Number(b.amount||0),0);
+    const totalWeight = members.reduce((s,m)=>s+Number(m.weight||2),0) || 1;
+    const avg = total / totalWeight;
+
+    let html = `
+      <div class="card" style="margin:0 0 8px 0;">
+        <div>总支出：<span class="amount">¥${total.toFixed(2)}</span></div>
+        <div class="small">按权重人均：¥${avg.toFixed(2)} / 权重1人</div>
+      </div>
+      <div>
+    `;
+
+    Object.keys(currentActivityBalances).forEach(name=>{
+      const b = currentActivityBalances[name];
+      html += `
+        <div class="member-row">
+          <div>
+            <div>${name}</div>
+            <div class="small">
+              实付：¥${b.paid.toFixed(2)} |
+              应付：¥${b.shouldPay.toFixed(2)}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:13px;${b.balance<0?'color:#c5221f':'color:#137333'}">
+              余额：¥${b.balance.toFixed(2)}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    div.innerHTML = html;
+  }
+
+  // ====== 计算余额（单个活动） ======
+  function calcBalancesForActivity() {
+    const members = currentActivity.members || [];
+    const bills = currentActivityBills;
+
+    const map = {};
+    members.forEach(m => {
+      map[m.name] = { paid:0, shouldPay:0, balance:0 };
+    });
+
+    // 统计实付与应付
+    bills.forEach(b => {
+      const amount = Number(b.amount || 0);
+      if (b.payer && map[b.payer]) {
+        map[b.payer].paid += amount;
+      }
+      if (b.splitDetail) {
+        Object.keys(b.splitDetail).forEach(name=>{
+          // 只统计权重大于0的参与人
+          if (!map[name]) return;
+          if (b.participants && b.participants[name] > 0) {
+            map[name].shouldPay += Number(b.splitDetail[name] || 0);
+          }
+        });
+      }
+    });
+
+    // 余额：应付 - 实付（负数表示欠款，正数表示应收）
+    Object.keys(map).forEach(name=>{
+      const v = map[name];
+      v.balance = v.shouldPay - v.paid;
+    });
+
+    return map;
+  }
+
+  // ====== 编辑费用 ======
+  function editBill(billDoc) {
+    // 如果传入的是字符串（JSON），需要解析
+    if (typeof billDoc === 'string') {
+      try {
+        billDoc = JSON.parse(billDoc.replace(/&quot;/g, '"'));
+      } catch (e) {
+        console.error('解析费用数据失败:', e);
+        return;
+      }
+    }
+    if (!currentActivity) return;
+    const m = document.getElementById('modalBill');
+    
+    // 填充费用数据
+    document.getElementById('billAmount').value = billDoc.amount || '';
+    document.getElementById('billTitle').value = billDoc.title || '';
+    document.getElementById('billCategory').value = billDoc.category || '';
+    const time = billDoc.time || billDoc.createdAt;
+    if (time) {
+      const d = (time.toDate) ? time.toDate() : new Date(time);
+      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000)
+                      .toISOString().slice(0,16);
+      document.getElementById('billTime').value = local;
+    }
+    document.getElementById('billRemark').value = billDoc.remark || '';
+
+    // 付款人列表
+    const payerSelect = document.getElementById('billPayer');
+    payerSelect.innerHTML = '';
+    currentActivity.members.forEach(mb => {
+      const opt = document.createElement('option');
+      opt.value = mb.name;
+      opt.textContent = mb.name;
+      if (mb.name === billDoc.payer) opt.selected = true;
+      payerSelect.appendChild(opt);
+    });
+
+    // 参与成员
+    const container = document.getElementById('billParticipants');
+    container.innerHTML = '';
+    if (billDoc.participants) {
+      Object.keys(billDoc.participants).forEach(name => {
+        const weight = billDoc.participants[name];
+        addBillParticipantRow(container, name, weight);
+      });
+    }
+    
+    // 保存费用ID用于更新
+    m.dataset.editId = billDoc._id;
+    // 更新按钮和标题文本
+    const btn = document.getElementById('saveBillBtn');
+    if (btn) btn.textContent = '更新费用';
+    const header = document.querySelector('#modalBill h3');
+    if (header) header.textContent = '编辑费用';
+    m.style.display = 'flex';
+  }
+  
+  // ====== 删除费用 ======
+  async function deleteBill(billId, billTitle) {
+    showConfirmDialog(`确定要删除费用"${billTitle}"吗？此操作不可恢复！`, async function() {
+      if (!db) {
+        showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
+        return;
+      }
+      try {
+        await db.collection('bills').doc(billId).remove();
+        showGlobalMessage('费用已删除');
+        await reloadActivityData();
+      } catch (e) {
+        appLog('删除费用失败: ' + e.message, 'error');
+        showGlobalMessage('删除费用失败：' + e.message, 'error');
+      }
+    });
+  }
+  
+  // ====== 保存费用 ======
+  async function saveBill() {
+    if (!currentActivity) return;
+    if (!db) {
+      showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
+      return;
+    }
+    const actId = currentActivity._id;
+    const amount = Number(document.getElementById('billAmount').value || 0);
+    const title = document.getElementById('billTitle').value.trim() || '未命名';
+    if (!amount || amount <= 0) {
+      showGlobalMessage('金额必须大于 0', 'error');
+      return;
+    }
+    const category = document.getElementById('billCategory').value.trim();
+    const payer = document.getElementById('billPayer').value;
+    const timeStr = document.getElementById('billTime').value;
+    const remark = document.getElementById('billRemark').value.trim();
+
+    const container = document.getElementById('billParticipants');
+    const rows = container.querySelectorAll('div.row');
+    const participants = {};
+    rows.forEach(row => {
+      const nameInput = row.querySelector('input[type="text"]');
+      const weightRadio = row.querySelector('input[type="radio"]:checked');
+      if (nameInput && weightRadio) {
+        const name = nameInput.value.trim();
+        const weight = Number(weightRadio.value || 0);
+        // 如果名字不为空且权重大于0，则参与
+        if (name && weight > 0) {
+          participants[name] = weight;
+        }
+      }
+    });
+    const names = Object.keys(participants);
+    if (!names.length) {
+      showGlobalMessage('至少添加一个参与成员（权重大于0）', 'error');
+      return;
+    }
+
+    const totalWeight = names.reduce((s,n)=>s+participants[n],0);
+    const splitDetail = {};
+    names.forEach(n=>{
+      const share = amount * participants[n] / totalWeight;
+      splitDetail[n] = Number(share.toFixed(2));
+    });
+
+    try {
+      const m = document.getElementById('modalBill');
+      const editId = m.dataset.editId;
+      
+      if (editId) {
+        // 更新费用
+        await db.collection('bills').doc(editId).update({
+          amount,
+          title,
+          category,
+          payer,
+          participants,
+          splitDetail,
+          time: timeStr ? new Date(timeStr) : new Date(),
+          remark,
+          updatedAt: new Date()
+        });
+        delete m.dataset.editId;
+        closeBillModal();
+        showGlobalMessage('费用已更新');
+      } else {
+        // 创建费用
+        const billDoc = {
+          activityId: actId,
+          amount,
+          title,
+          category,
+          payer,
+          participants,
+          splitDetail,
+          time: timeStr ? new Date(timeStr) : new Date(),
+          remark,
+          createdAt: new Date()
+        };
+        await db.collection('bills').add(billDoc);
+        closeBillModal();
+        showGlobalMessage('费用已保存');
+      }
+      await reloadActivityData();
+    } catch (e) {
+      appLog('保存费用失败: ' + e.message, 'error');
+      showGlobalMessage('保存费用失败：' + e.message, 'error');
+    }
+  }
+
+
+  // ====== Tab 切换 ======
+  function switchActivityTab(tab) {
+    const tabs = ['bills','members','summary'];
+    tabs.forEach(t=>{
+      document.getElementById('tab'+capitalize(t)).classList.remove('tab-active');
+      document.getElementById('tabContent'+capitalize(t)).classList.add('hidden');
+    });
+    document.getElementById('tab'+capitalize(tab)).classList.add('tab-active');
+    document.getElementById('tabContent'+capitalize(tab)).classList.remove('hidden');
+  }
+
+  function capitalize(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+
+  function formatTime(val) {
+    if (!val) return '';
+    const d = (val.toDate) ? val.toDate() : new Date(val);
+    return d.toLocaleString('zh-CN', {hour12:false});
+  }
+
+  // ====== 初始化入口 ======
+  (async function main(){
+    appLog('开始初始化应用', 'info');
+    appLog('检查 SDK 加载状态:', 'info');
+    appLog('  - typeof cloudbase: ' + typeof cloudbase, 'info');
+    appLog('  - typeof tcb: ' + typeof tcb, 'info');
+    appLog('  - typeof window.cloudbase: ' + typeof window.cloudbase, 'info');
+    appLog('  - typeof window.tcb: ' + typeof window.tcb, 'info');
+    
+    // 等待 DOM 完全加载
+    if (document.readyState === 'loading') {
+      await new Promise(resolve => {
+        document.addEventListener('DOMContentLoaded', resolve);
+      });
+    }
+    
+    // 再等待一下，确保 SDK 脚本执行完成
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await initCloudBase();
+    await loadUserName();
+    await loadCustomActivityTypes();
+    
+    // 监听用户名输入框变化，切换用户名时重置错误计数
+    const userNameInput = document.getElementById('inputUserName');
+    if (userNameInput) {
+      let lastUserName = userNameInput.value;
+      userNameInput.addEventListener('input', function() {
+        const currentValue = this.value.trim();
+        // 如果用户名改变，重置该用户名的错误计数
+        if (currentValue !== lastUserName && passwordErrorCount[currentValue]) {
+          passwordErrorCount[currentValue] = 0;
+          appLog('用户名已改变，重置错误计数', 'info');
+        }
+        lastUserName = currentValue;
+      });
+    }
+    
+    // 初始页面只显示登录/注册页面，不显示活动列表
+    // 活动列表将在用户登录成功后显示
+    document.getElementById('screenHome').classList.add('hidden');
+  })();
+</script>
+  <!-- 日志面板 -->
+  <button id="logToggle" onclick="toggleLogPanel()" title="显示/隐藏日志">📋</button>
+  <div id="logPanel">
+    <div id="logHeader">
+      <span id="logTitle">系统日志</span>
+      <div id="logControls">
+        <button onclick="clearLogs()">清空</button>
+        <button onclick="toggleLogPanel()">关闭</button>
+      </div>
+    </div>
+    <div id="logContent"></div>
+  </div>
+</body>
+</html>
