@@ -1656,11 +1656,39 @@
     m.style.display = 'flex';
   }
   function closeBillModal() {
-    document.getElementById('modalBill').style.display = 'none';
+    const m = document.getElementById('modalBill');
+    m.style.display = 'none';
+    
+    // 恢复表单状态（移除只读模式）
+    const allInputs = m.querySelectorAll('input, textarea, select');
+    allInputs.forEach(input => {
+      input.disabled = false;
+      input.style.backgroundColor = '';
+      input.style.cursor = '';
+    });
+    
+    // 恢复保存按钮
+    const saveBtn = document.getElementById('saveBillBtn');
+    if (saveBtn) {
+      saveBtn.style.display = '';
+    }
+    
+    // 恢复"添加参与人"按钮
+    const addParticipantBtn = document.querySelector('button[onclick="addBillParticipant()"]');
+    if (addParticipantBtn) {
+      addParticipantBtn.style.display = '';
+    }
+    
+    // 恢复标题
+    const header = document.querySelector('#modalBill h3');
+    if (header) header.textContent = '添加费用';
+    
+    // 清除编辑ID
+    delete m.dataset.editId;
   }
   
   // 添加参与人输入行
-  function addBillParticipantRow(container, name = '', weight = 2) {
+  function addBillParticipantRow(container, name = '', weight = 2, readOnly = false) {
     // 确保权重是数字类型
     const weightNum = typeof weight === 'number' ? weight : Number(weight || 0);
     console.log(`addBillParticipantRow - name: ${name}, weight参数: ${weight}, weightNum: ${weightNum}, 类型: ${typeof weightNum}`);
@@ -1680,6 +1708,11 @@
     nameInput.style.minWidth = '120px'; // 确保姓名列有足够宽度
     nameInput.style.marginTop = '0';
     nameInput.style.marginBottom = '0';
+    if (readOnly) {
+      nameInput.disabled = true;
+      nameInput.style.backgroundColor = '#f5f5f5';
+      nameInput.style.cursor = 'not-allowed';
+    }
     
     // 权重选择（使用单选框）
     const weightContainer = document.createElement('div');
@@ -1704,6 +1737,9 @@
       radio.name = uniqueId; // 使用唯一名称，确保同一行的单选框是一组
       radio.value = String(w);
       radio.id = uniqueId + '_' + w;
+      if (readOnly) {
+        radio.disabled = true;
+      }
       
       // 确保权重是数字类型进行比较
       if (w === weightNum) {
@@ -1724,21 +1760,23 @@
       weightContainer.appendChild(radioGroup);
     });
     
-    // 删除按钮
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'btn btn-secondary';
-    deleteBtn.textContent = '删除';
-    deleteBtn.style.padding = '4px 8px';
-    deleteBtn.style.fontSize = '12px';
-    deleteBtn.style.flexShrink = '0'; // 防止被压缩
-    deleteBtn.onclick = function() {
-      row.remove();
-    };
-    
+    // 删除按钮（只读模式下隐藏）
     row.appendChild(nameInput);
     row.appendChild(weightContainer);
-    row.appendChild(deleteBtn);
+    
+    if (!readOnly) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn btn-secondary';
+      deleteBtn.textContent = '删除';
+      deleteBtn.style.padding = '4px 8px';
+      deleteBtn.style.fontSize = '12px';
+      deleteBtn.style.flexShrink = '0'; // 防止被压缩
+      deleteBtn.onclick = function() {
+        row.remove();
+      };
+      row.appendChild(deleteBtn);
+    }
     container.appendChild(row);
   }
   
@@ -2169,7 +2207,7 @@
       // 计算余额
       currentActivityBalances = calcBalancesForActivity();
 
-      renderBills();
+      await renderBills();
       renderMembers();
       renderSummary();
     } catch (e) {
@@ -2205,12 +2243,106 @@
   }
   
   // ====== 费用渲染 ======
-  function renderBills() {
+  async function renderBills() {
     const div = document.getElementById('billList');
     if (!currentActivityBills.length) {
       div.innerHTML = '<div class="small">暂无费用记录</div>';
       return;
     }
+    
+    // 获取当前登录用户的 _openid
+    let currentUserOpenId = null;
+    try {
+      if (auth) {
+        const loginState = await auth.getLoginState();
+        
+        // 安全地获取 loginState 的字段（避免循环引用）
+        if (loginState) {
+          appLog('loginState的类型: ' + typeof loginState, 'info');
+          appLog('loginState的所有字段: ' + Object.keys(loginState).join(', '), 'info');
+          
+          // 尝试多种可能的字段名
+          // 腾讯云开发可能使用不同的字段名
+          if (loginState.openid) {
+            currentUserOpenId = loginState.openid;
+            appLog('从 loginState.openid 获取到: ' + currentUserOpenId, 'info');
+          } else if (loginState.uid) {
+            currentUserOpenId = loginState.uid;
+            appLog('从 loginState.uid 获取到: ' + currentUserOpenId, 'info');
+          } else if (loginState.userId) {
+            currentUserOpenId = loginState.userId;
+            appLog('从 loginState.userId 获取到: ' + currentUserOpenId, 'info');
+          } else if (loginState._openid) {
+            currentUserOpenId = loginState._openid;
+            appLog('从 loginState._openid 获取到: ' + currentUserOpenId, 'info');
+          } else if (loginState.credential) {
+            try {
+              currentUserOpenId = loginState.credential.openid || loginState.credential.uid;
+              if (currentUserOpenId) {
+                appLog('从 loginState.credential 获取到: ' + currentUserOpenId, 'info');
+              }
+            } catch (e) {
+              appLog('读取 credential 失败: ' + e.message, 'warning');
+            }
+          } else if (loginState.user) {
+            try {
+              currentUserOpenId = loginState.user.openid || loginState.user.uid;
+              if (currentUserOpenId) {
+                appLog('从 loginState.user 获取到: ' + currentUserOpenId, 'info');
+              }
+            } catch (e) {
+              appLog('读取 user 失败: ' + e.message, 'warning');
+            }
+          }
+          
+          // 如果还是没找到，尝试通过数据库操作获取当前用户的 openid
+          // 腾讯云开发在数据库操作时会自动添加 _openid 字段
+          if (!currentUserOpenId && db) {
+            try {
+              // 尝试创建一个临时文档，然后读取它的 _openid
+              // 或者尝试查询一个已知的文档，从返回结果中获取当前用户的 openid
+              // 但更简单的方法是：检查是否有 getUserInfo 方法
+              if (typeof db.getUserInfo === 'function') {
+                const userInfo = db.getUserInfo();
+                if (userInfo && userInfo.openid) {
+                  currentUserOpenId = userInfo.openid;
+                  appLog('从 db.getUserInfo() 获取到: ' + currentUserOpenId, 'info');
+                }
+              }
+              
+              // 如果还是没找到，尝试通过查询当前活动来获取
+              // 因为查询时会自动添加当前用户的 openid 信息
+              if (!currentUserOpenId && currentActivity && currentActivity._id) {
+                try {
+                  // 尝试查询一个文档，看看返回结果中是否有当前用户信息
+                  // 但这个方法不太可靠，因为我们需要的是当前用户的 openid，而不是文档的 _openid
+                  // 实际上，文档的 _openid 就是创建者的 openid
+                  // 所以我们需要另一种方法
+                  
+                  // 更可靠的方法：通过数据库的规则来获取
+                  // 但腾讯云开发可能不提供直接获取当前用户 openid 的 API
+                  // 所以我们需要依赖 loginState
+                } catch (e) {
+                  appLog('尝试从数据库获取用户信息失败: ' + e.message, 'warning');
+                }
+              }
+            } catch (e) {
+              appLog('尝试从数据库获取用户信息失败: ' + e.message, 'warning');
+            }
+          }
+          
+          appLog('最终获取的当前用户_openid: ' + (currentUserOpenId || '未找到'), currentUserOpenId ? 'success' : 'warning');
+        } else {
+          appLog('loginState 为空', 'warning');
+        }
+      } else {
+        appLog('auth 对象不存在', 'warning');
+      }
+    } catch (e) {
+      appLog('获取当前用户_openid失败: ' + e.message, 'warning');
+      // 不尝试序列化错误对象，避免循环引用
+    }
+    
     div.innerHTML = '';
     currentActivityBills.forEach(b => {
       // 只显示费用名称
@@ -2288,11 +2420,24 @@
         participantsHtml = '<span class="small">无参与成员</span>';
       }
       
+      // 检查当前用户是否是记录的创建者
+      const billOpenId = b._openid || null;
+      appLog(`费用记录 ${b.title || '未命名'} - billOpenId: ${billOpenId}, currentUserOpenId: ${currentUserOpenId}`, 'info');
+      const isCreator = currentUserOpenId && billOpenId && currentUserOpenId === billOpenId;
+      appLog(`费用记录 ${b.title || '未命名'} - 是否为创建者: ${isCreator}`, 'info');
+      
+      // 根据权限设置按钮状态
+      const editDisabled = !isCreator ? 'disabled' : '';
+      const deleteDisabled = !isCreator ? 'disabled' : '';
+      const editStyle = !isCreator ? 'padding: 4px 8px; font-size: 12px; opacity: 0.5; cursor: not-allowed;' : 'padding: 4px 8px; font-size: 12px;';
+      const deleteStyle = !isCreator ? 'padding: 4px 8px; font-size: 12px; background: #c5221f; opacity: 0.5; cursor: not-allowed;' : 'padding: 4px 8px; font-size: 12px; background: #c5221f;';
+      
       const billDiv = document.createElement('div');
       billDiv.className = 'bill-item';
+      // 左侧内容可点击查看详情（不受权限限制）
       billDiv.innerHTML = `
         <div class="row">
-          <div style="flex: 1; min-width: 0;">
+          <div style="flex: 1; min-width: 0; cursor: pointer;" onclick="viewBillDetail(${JSON.stringify(b).replace(/"/g, '&quot;')})">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 2px;">
                 ${participantsHtml}
@@ -2307,8 +2452,8 @@
               ¥${Number(b.amount || 0).toFixed(2)}
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-secondary" onclick="editBill(${JSON.stringify(b).replace(/"/g, '&quot;')})" style="padding: 4px 8px; font-size: 12px;">编辑</button>
-              <button class="btn btn-secondary" onclick="deleteBill('${b._id}', '${(b.title || '未命名').replace(/'/g, "\\'")}')" style="padding: 4px 8px; font-size: 12px; background: #c5221f;">删除</button>
+              <button class="btn btn-secondary" ${editDisabled} onclick="${isCreator ? `editBill(${JSON.stringify(b).replace(/"/g, '&quot;')})` : 'return false;'}" style="${editStyle}">编辑</button>
+              <button class="btn btn-secondary" ${deleteDisabled} onclick="${isCreator ? `deleteBill('${b._id}', '${(b.title || '未命名').replace(/'/g, "\\'")}')` : 'return false;'}" style="${deleteStyle}">删除</button>
             </div>
           </div>
         </div>
@@ -2460,8 +2605,166 @@
     return map;
   }
 
+  // ====== 查看费用详情（只读模式，所有人可查看） ======
+  async function viewBillDetail(billDoc) {
+    // 提取费用ID（支持字符串或对象）
+    let billId = null;
+    if (typeof billDoc === 'string') {
+      try {
+        const parsed = JSON.parse(billDoc.replace(/&quot;/g, '"'));
+        billId = parsed._id || parsed.id || billDoc;
+      } catch (e) {
+        billId = billDoc;
+      }
+    } else if (billDoc && billDoc._id) {
+      billId = billDoc._id;
+    }
+    
+    if (!billId) {
+      showGlobalMessage('无法获取费用ID', 'error');
+      return;
+    }
+    
+    if (!currentActivity || !db) {
+      showGlobalMessage('数据未初始化', 'error');
+      return;
+    }
+    
+    // 从数据库加载最新数据
+    let billData = null;
+    if (typeof billDoc === 'object' && billDoc && billDoc._id) {
+      billData = { ...billDoc };
+    }
+    
+    try {
+      const freshBill = await db.collection('bills').doc(billId).get();
+      let freshData = null;
+      if (freshBill && freshBill.data) {
+        if (Array.isArray(freshBill.data)) {
+          if (freshBill.data.length > 0) {
+            freshData = freshBill.data[0];
+          }
+        } else {
+          freshData = freshBill.data;
+        }
+      } else if (freshBill && (freshBill._id || freshBill.amount)) {
+        freshData = freshBill;
+      }
+      
+      if (freshData) {
+        billData = { _id: billId, ...freshData };
+      } else if (!billData) {
+        showGlobalMessage('费用数据不存在', 'error');
+        return;
+      }
+    } catch (e) {
+      if (!billData) {
+        showGlobalMessage('加载费用数据失败：' + e.message, 'error');
+        return;
+      }
+    }
+    
+    if (!billData || !billData._id) {
+      showGlobalMessage('费用数据无效', 'error');
+      return;
+    }
+    
+    // 填充费用数据到表单（只读模式）
+    const m = document.getElementById('modalBill');
+    const amountInput = document.getElementById('billAmount');
+    const titleInput = document.getElementById('billTitle');
+    const categoryInput = document.getElementById('billCategory');
+    const payerSelect = document.getElementById('billPayer');
+    const remarkInput = document.getElementById('billRemark');
+    const timeInput = document.getElementById('billTime');
+    const container = document.getElementById('billParticipants');
+    const saveBtn = document.getElementById('saveBillBtn');
+    const addParticipantBtn = document.querySelector('button[onclick="addBillParticipant()"]');
+    
+    // 填充基本信息
+    if (amountInput) amountInput.value = billData.amount || '';
+    if (titleInput) titleInput.value = billData.title || '';
+    if (categoryInput) categoryInput.value = billData.category || '';
+    if (remarkInput) remarkInput.value = billData.remark || '';
+    
+    // 填充时间
+    if (timeInput && billData.time) {
+      const time = new Date(billData.time);
+      const year = time.getFullYear();
+      const month = String(time.getMonth() + 1).padStart(2, '0');
+      const day = String(time.getDate()).padStart(2, '0');
+      const hours = String(time.getHours()).padStart(2, '0');
+      const minutes = String(time.getMinutes()).padStart(2, '0');
+      timeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+    
+    // 填充付款人
+    if (payerSelect && billData.payer) {
+      const options = payerSelect.querySelectorAll('option');
+      options.forEach(opt => {
+        opt.selected = opt.value === billData.payer;
+      });
+    }
+    
+    // 填充参与成员（只读）
+    if (container) {
+      container.innerHTML = '';
+      const activityMembers = currentActivity.members || [];
+      const savedParticipants = billData.participants || {};
+      
+      activityMembers.forEach(mb => {
+        const memberName = typeof mb === 'string' ? mb : mb.name;
+        const weight = savedParticipants[memberName] || 0;
+        addBillParticipantRow(container, memberName, weight, true); // true 表示只读
+      });
+    }
+    
+    // 隐藏"添加参与人"按钮
+    if (addParticipantBtn) {
+      addParticipantBtn.style.display = 'none';
+    }
+    
+    // 设置所有输入框为只读
+    const allInputs = m.querySelectorAll('input, textarea, select');
+    allInputs.forEach(input => {
+      input.disabled = true;
+      input.style.backgroundColor = '#f5f5f5';
+      input.style.cursor = 'not-allowed';
+    });
+    
+    // 隐藏保存按钮
+    if (saveBtn) {
+      saveBtn.style.display = 'none';
+    }
+    
+    // 更新标题
+    const header = document.querySelector('#modalBill h3');
+    if (header) header.textContent = '费用详情';
+    
+    // 清除编辑ID，确保不会触发更新
+    delete m.dataset.editId;
+    
+    m.style.display = 'flex';
+  }
+  
   // ====== 编辑费用 ======
   async function editBill(billDoc) {
+    // 权限检查：只有记录的创建者才能编辑
+    try {
+      if (auth) {
+        const loginState = await auth.getLoginState();
+        if (loginState && loginState.openid) {
+          const billOpenId = billDoc._openid || null;
+          if (billOpenId && loginState.openid !== billOpenId) {
+            showGlobalMessage('您没有权限编辑此费用记录（只有创建者可以编辑）', 'error');
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      appLog('权限检查失败: ' + e.message, 'warning');
+      // 如果权限检查失败，仍然允许编辑（向后兼容）
+    }
     // 提取费用ID（支持字符串或对象）
     let billId = null;
     if (typeof billDoc === 'string') {
@@ -2695,6 +2998,36 @@
   
   // ====== 删除费用 ======
   async function deleteBill(billId, billTitle) {
+    // 权限检查：只有记录的创建者才能删除
+    try {
+      if (auth && billId) {
+        // 先获取费用记录以检查 _openid
+        const billDoc = await db.collection('bills').doc(billId).get();
+        let billData = null;
+        if (billDoc && billDoc.data) {
+          if (Array.isArray(billDoc.data)) {
+            billData = billDoc.data[0];
+          } else {
+            billData = billDoc.data;
+          }
+        }
+        
+        if (billData) {
+          const loginState = await auth.getLoginState();
+          if (loginState && loginState.openid) {
+            const billOpenId = billData._openid || null;
+            if (billOpenId && loginState.openid !== billOpenId) {
+              showGlobalMessage('您没有权限删除此费用记录（只有创建者可以删除）', 'error');
+              return;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      appLog('权限检查失败: ' + e.message, 'warning');
+      // 如果权限检查失败，仍然允许删除（向后兼容）
+    }
+    
     showConfirmDialog(`确定要删除费用"${billTitle}"吗？此操作不可恢复！`, async function() {
       if (!db) {
         showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
