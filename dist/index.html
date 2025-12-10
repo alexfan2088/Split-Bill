@@ -2673,12 +2673,41 @@
       timeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
     }
     
-    // 填充付款人
-    if (payerSelect && billData.payer) {
-      const options = payerSelect.querySelectorAll('option');
-      options.forEach(opt => {
-        opt.selected = opt.value === billData.payer;
+    // 填充付款人（先创建选项，再设置选中状态）
+    if (payerSelect) {
+      payerSelect.innerHTML = '';
+      const activityMembers = currentActivity.members || [];
+      
+      // 从活动的group中加载成员（如果需要）
+      let membersToUse = activityMembers;
+      if (db && currentActivity._id) {
+        try {
+          const groupRes = await db.collection('groups')
+            .where({ activityId: currentActivity._id })
+            .limit(1)
+            .get();
+          
+          if (groupRes.data && groupRes.data.length > 0 && groupRes.data[0].members) {
+            membersToUse = groupRes.data[0].members;
+          }
+        } catch (e) {
+          appLog('加载活动成员失败: ' + e.message, 'warning');
+        }
+      }
+      
+      // 创建付款人选项
+      membersToUse.forEach(mb => {
+        const opt = document.createElement('option');
+        const memberName = typeof mb === 'string' ? mb : mb.name;
+        opt.value = memberName;
+        opt.textContent = memberName;
+        if (billData.payer && memberName === billData.payer) {
+          opt.selected = true;
+        }
+        payerSelect.appendChild(opt);
       });
+      
+      appLog('已填充付款人选项，选中: ' + (billData.payer || '无'), 'info');
     }
     
     // 填充参与成员（只读）
