@@ -2819,20 +2819,32 @@
         }), 'info');
         
         try {
-          // 尝试使用 set 方法更新（merge: true 表示合并更新）
-          // 如果 update 方法返回 updated: 0，可能是因为权限或数据格式问题
+          // 尝试使用 update 方法更新费用
           appLog('尝试使用 update 方法更新费用', 'info');
-          const updateResult = await db.collection('bills').doc(editId).update({
-            amount,
-            title,
-            category,
-            payer,
-            participants,
-            splitDetail,
-            time: timeStr ? new Date(timeStr) : new Date(),
-            remark,
-            updatedAt: new Date()
+          appLog('更新数据详情 - participants类型: ' + typeof participants + ', 值: ' + JSON.stringify(participants), 'info');
+          
+          // 确保 participants 是纯对象，不包含任何特殊属性
+          const cleanParticipants = {};
+          Object.keys(participants).forEach(key => {
+            cleanParticipants[key] = Number(participants[key]) || 0;
           });
+          appLog('清理后的 participants: ' + JSON.stringify(cleanParticipants), 'info');
+          
+          const updateData = {
+            amount: Number(amount) || 0,
+            title: String(title || ''),
+            category: String(category || ''),
+            payer: String(payer || ''),
+            participants: cleanParticipants,
+            splitDetail: splitDetail || {},
+            time: timeStr ? new Date(timeStr) : new Date(),
+            remark: String(remark || ''),
+            updatedAt: new Date()
+          };
+          
+          appLog('准备更新的数据（清理后）: ' + JSON.stringify(updateData), 'info');
+          
+          const updateResult = await db.collection('bills').doc(editId).update(updateData);
           appLog('费用更新返回结果: ' + JSON.stringify(updateResult), 'info');
           
           // 如果 updated 为 0，可能是权限或数据格式问题
@@ -2870,17 +2882,55 @@
                 delete mergedData._openid;
                 
                 appLog('合并后的数据: ' + JSON.stringify(mergedData), 'info');
-                await db.collection('bills').doc(editId).set(mergedData);
-                appLog('使用 set 方法更新成功', 'success');
+                
+                // 尝试使用 set 方法，但需要确保格式正确
+                // 腾讯云开发的 set 方法可能需要特定的调用方式
+                try {
+                  // 方法1：直接使用 set（不带第二个参数）
+                  await db.collection('bills').doc(editId).set(mergedData);
+                  appLog('使用 set 方法更新成功', 'success');
+                } catch (setError1) {
+                  appLog('set 方法失败，尝试使用 update 方法逐个字段更新: ' + setError1.message, 'warning');
+                  // 方法2：如果 set 失败，尝试使用 update 方法，但分别更新每个字段
+                  try {
+                    // 先更新 participants（这是最关键的字段）
+                    const updateParticipants = await db.collection('bills').doc(editId).update({
+                      participants: participants
+                    });
+                    appLog('单独更新 participants 结果: ' + JSON.stringify(updateParticipants), 'info');
+                    
+                    // 然后更新其他字段
+                    if (updateParticipants && updateParticipants.updated > 0) {
+                      await db.collection('bills').doc(editId).update({
+                        amount,
+                        title,
+                        category,
+                        payer,
+                        splitDetail,
+                        time: timeStr ? new Date(timeStr) : new Date(),
+                        remark,
+                        updatedAt: new Date()
+                      });
+                      appLog('使用 update 方法分步更新成功', 'success');
+                    } else {
+                      throw new Error('participants 更新失败');
+                    }
+                  } catch (updateError2) {
+                    appLog('分步 update 也失败: ' + updateError2.message, 'error');
+                    throw updateError2;
+                  }
+                }
               } else {
                 appLog('无法读取现有文档，无法使用 set 方法', 'error');
                 throw new Error('无法读取现有文档');
               }
             } catch (setError) {
-              appLog('使用 set 方法更新失败: ' + setError.message, 'error');
+              appLog('使用 set/update 方法更新失败: ' + setError.message, 'error');
               appLog('错误详情: ' + JSON.stringify(setError), 'error');
-              // 不抛出错误，让程序继续，但显示警告
-              showGlobalMessage('更新可能未成功，请刷新页面检查', 'warning');
+              appLog('错误堆栈: ' + (setError.stack || '无堆栈信息'), 'error');
+              // 抛出错误，让用户知道更新失败
+              showGlobalMessage('更新失败：' + setError.message + '，请刷新页面检查', 'error');
+              return; // 直接返回，不继续执行
             }
           } else {
             appLog('费用更新成功，返回结果: ' + JSON.stringify(updateResult), 'success');
