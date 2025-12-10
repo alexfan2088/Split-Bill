@@ -359,7 +359,7 @@
 
   <!-- 顶部：当前用户 -->
   <div class="card" id="userCard">
-    <h2 style="color: #28a745; text-align: center; margin-bottom: 20px;">我们AA吧</h2>
+    <h2 style="color: #28a745; text-align: center; margin-bottom: 20px;">醵金合宴</h2>
     <div>
       <label>用户名：</label>
       <input id="inputUserName" placeholder="输入你的名字，如：唐朝奎" />
@@ -484,15 +484,12 @@
     <input id="billAmount" type="number" step="0.01" min="0" />
     <label>费用名称</label>
     <input id="billTitle" placeholder="例如：晚餐、山姆购物" />
-    <label>分类</label>
-    <input id="billCategory" placeholder="例如：美食、交通等" />
     <label>时间</label>
     <input id="billTime" type="datetime-local" />
     <label>付款人</label>
     <select id="billPayer"></select>
     <label>参与成员（选择权重：0表示不参与，1-3表示人数）</label>
     <div id="billParticipants"></div>
-    <button type="button" class="btn btn-secondary" onclick="addBillParticipant()" style="margin-top: 8px;">+ 添加参与人</button>
     <label>备注</label>
     <textarea id="billRemark" rows="2"></textarea>
     <button class="btn btn-full" onclick="saveBill()" id="saveBillBtn">保存费用</button>
@@ -1368,6 +1365,15 @@
     const screenHome = document.getElementById('screenHome');
     const screenActivity = document.getElementById('screenActivity');
     const userCard = document.getElementById('userCard');
+    const modalBill = document.getElementById('modalBill');
+    const modalActivity = document.getElementById('modalActivity');
+    
+    // 如果费用Modal或活动Modal显示，隐藏返回按钮
+    if ((modalBill && modalBill.style.display === 'flex') || 
+        (modalActivity && modalActivity.style.display === 'flex')) {
+      backBtn.style.display = 'none';
+      return;
+    }
     
     // 如果活动详情页显示，显示返回按钮
     if (!screenActivity.classList.contains('hidden')) {
@@ -1598,9 +1604,11 @@
     // 加载自定义类型
     loadCustomActivityTypes();
     m.style.display = 'flex';
+    updateBackButton(); // 隐藏返回按钮
   }
   function closeActivityModal() {
     document.getElementById('modalActivity').style.display = 'none';
+    updateBackButton(); // 恢复返回按钮
   }
 
   async function showBillModal() {
@@ -1608,7 +1616,6 @@
     const m = document.getElementById('modalBill');
     document.getElementById('billAmount').value = '';
     document.getElementById('billTitle').value = '';
-    document.getElementById('billCategory').value = '';
     const now = new Date();
     const local = new Date(now.getTime() - now.getTimezoneOffset()*60000)
                     .toISOString().slice(0,16);
@@ -1648,16 +1655,51 @@
     // 参与成员 + 权重（从活动的group中加载）
     const container = document.getElementById('billParticipants');
     container.innerHTML = '';
+    
+    // 查询该活动最近一次的费用记录，继承其权重
+    let lastBillParticipants = null;
+    if (db && currentActivity._id) {
+      try {
+        const lastBillRes = await db.collection('bills')
+          .where({ activityId: currentActivity._id })
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+        
+        if (lastBillRes.data && lastBillRes.data.length > 0) {
+          const lastBill = lastBillRes.data[0];
+          if (lastBill.participants) {
+            lastBillParticipants = lastBill.participants;
+            appLog('找到最近一次费用记录，继承权重: ' + JSON.stringify(lastBillParticipants), 'info');
+          }
+        }
+      } catch (e) {
+        appLog('查询最近一次费用记录失败: ' + e.message, 'warning');
+        // 如果查询失败（可能是没有索引），继续使用默认权重
+      }
+    }
+    
+    // 为每个成员设置权重：如果有最近一次的费用记录，使用其权重；否则默认权重为2
     activityMembers.forEach(mb => {
       const memberName = typeof mb === 'string' ? mb : mb.name;
-      addBillParticipantRow(container, memberName, 2); // 费用添加时默认权重为2
+      let weight = 2; // 默认权重为2
+      
+      if (lastBillParticipants && lastBillParticipants.hasOwnProperty(memberName)) {
+        // 继承最近一次费用记录的权重
+        weight = Number(lastBillParticipants[memberName]) || 0;
+        appLog(`成员 ${memberName} 继承权重: ${weight}`, 'info');
+      }
+      
+      addBillParticipantRow(container, memberName, weight);
     });
 
     m.style.display = 'flex';
+    updateBackButton(); // 更新返回按钮状态
   }
   function closeBillModal() {
     const m = document.getElementById('modalBill');
     m.style.display = 'none';
+    updateBackButton(); // 更新返回按钮状态
     
     // 恢复表单状态（移除只读模式）
     const allInputs = m.querySelectorAll('input, textarea, select');
@@ -1673,11 +1715,7 @@
       saveBtn.style.display = '';
     }
     
-    // 恢复"添加参与人"按钮
-    const addParticipantBtn = document.querySelector('button[onclick="addBillParticipant()"]');
-    if (addParticipantBtn) {
-      addParticipantBtn.style.display = '';
-    }
+    // "添加参与人"按钮已移除，参与人固定为活动成员
     
     // 恢复标题
     const header = document.querySelector('#modalBill h3');
@@ -1699,20 +1737,17 @@
     row.style.alignItems = 'center';
     row.style.gap = '8px';
     
-    // 名字输入框（第一列，确保完整显示）
+    // 名字显示（固定为活动成员，不可编辑）
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
-    nameInput.placeholder = '输入参与人名字';
     nameInput.value = name;
     nameInput.style.flex = '1';
     nameInput.style.minWidth = '120px'; // 确保姓名列有足够宽度
     nameInput.style.marginTop = '0';
     nameInput.style.marginBottom = '0';
-    if (readOnly) {
-      nameInput.disabled = true;
-      nameInput.style.backgroundColor = '#f5f5f5';
-      nameInput.style.cursor = 'not-allowed';
-    }
+    nameInput.disabled = true; // 始终禁用，因为参与人固定为活动成员
+    nameInput.style.backgroundColor = '#f5f5f5';
+    nameInput.style.cursor = 'not-allowed';
     
     // 权重选择（使用单选框）
     const weightContainer = document.createElement('div');
@@ -1760,23 +1795,9 @@
       weightContainer.appendChild(radioGroup);
     });
     
-    // 删除按钮（只读模式下隐藏）
+    // 不显示删除按钮，因为参与人固定为活动成员
     row.appendChild(nameInput);
     row.appendChild(weightContainer);
-    
-    if (!readOnly) {
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'btn btn-secondary';
-      deleteBtn.textContent = '删除';
-      deleteBtn.style.padding = '4px 8px';
-      deleteBtn.style.fontSize = '12px';
-      deleteBtn.style.flexShrink = '0'; // 防止被压缩
-      deleteBtn.onclick = function() {
-        row.remove();
-      };
-      row.appendChild(deleteBtn);
-    }
     container.appendChild(row);
   }
   
@@ -1916,6 +1937,7 @@
         // 创建活动
         const actRes = await db.collection('activities').add({
           name, type, remark, members, memberNames,
+          creator: currentUserName, // 保存创建者用户名
           createdAt: new Date()
         });
         
@@ -1987,6 +2009,16 @@
       
       listDiv.innerHTML = '';
       userActivities.forEach(act => {
+        // 检查当前用户是否是活动的创建者
+        const actCreator = act.creator || null;
+        const isCreator = currentUserName && actCreator && currentUserName === actCreator;
+        
+        // 根据权限设置按钮状态
+        const editDisabled = !isCreator ? 'disabled' : '';
+        const deleteDisabled = !isCreator ? 'disabled' : '';
+        const editStyle = !isCreator ? 'padding: 4px 8px; font-size: 12px; opacity: 0.5; cursor: not-allowed;' : 'padding: 4px 8px; font-size: 12px;';
+        const deleteStyle = !isCreator ? 'padding: 4px 8px; font-size: 12px; background: #c5221f; opacity: 0.5; cursor: not-allowed;' : 'padding: 4px 8px; font-size: 12px; background: #c5221f;';
+        
         const div = document.createElement('div');
         div.className = 'activity-item';
         const members = (act.members || []).map(m=>m.name).join('、');
@@ -2000,8 +2032,8 @@
               </div>
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-secondary" onclick="event.stopPropagation(); editActivity(${JSON.stringify(act).replace(/"/g, '&quot;')})" style="padding: 4px 8px; font-size: 12px;">编辑</button>
-              <button class="btn btn-secondary" onclick="event.stopPropagation(); deleteActivity('${act._id}', '${act.name}')" style="padding: 4px 8px; font-size: 12px; background: #c5221f;">删除</button>
+              <button class="btn btn-secondary" ${editDisabled} onclick="event.stopPropagation(); ${isCreator ? `editActivity(${JSON.stringify(act).replace(/"/g, '&quot;')})` : 'return false;'}" style="${editStyle}">编辑</button>
+              <button class="btn btn-secondary" ${deleteDisabled} onclick="event.stopPropagation(); ${isCreator ? `deleteActivity('${act._id}', '${act.name}')` : 'return false;'}" style="${deleteStyle}">删除</button>
             </div>
           </div>
         `;
@@ -2044,6 +2076,13 @@
         console.error('解析活动数据失败:', e);
         return;
       }
+    }
+    
+    // 权限检查：只有活动的创建者才能编辑
+    const actCreator = actDoc.creator || null;
+    if (actCreator && currentUserName && currentUserName !== actCreator) {
+      showGlobalMessage('您没有权限编辑此活动（只有创建者可以编辑）', 'error');
+      return;
     }
     const m = document.getElementById('modalActivity');
     document.getElementById('actName').value = actDoc.name || '';
@@ -2113,6 +2152,7 @@
     // 加载自定义类型
     loadCustomActivityTypes();
     m.style.display = 'flex';
+    updateBackButton(); // 隐藏返回按钮
   }
   
   // ====== 自定义确认对话框 ======
@@ -2146,6 +2186,33 @@
   
   // ====== 删除活动 ======
   async function deleteActivity(actId, actName) {
+    // 权限检查：只有活动的创建者才能删除
+    try {
+      if (actId && db) {
+        // 先获取活动记录以检查 creator
+        const actDoc = await db.collection('activities').doc(actId).get();
+        let actData = null;
+        if (actDoc && actDoc.data) {
+          if (Array.isArray(actDoc.data)) {
+            actData = actDoc.data[0];
+          } else {
+            actData = actDoc.data;
+          }
+        }
+        
+        if (actData) {
+          const actCreator = actData.creator || null;
+          if (actCreator && currentUserName && currentUserName !== actCreator) {
+            showGlobalMessage('您没有权限删除此活动（只有创建者可以删除）', 'error');
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      appLog('权限检查失败: ' + e.message, 'warning');
+      // 如果权限检查失败，仍然允许删除（向后兼容）
+    }
+    
     showConfirmDialog(`确定要删除活动"${actName}"吗？此操作不可恢复！`, async function() {
       if (!db) {
         showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
@@ -2250,98 +2317,9 @@
       return;
     }
     
-    // 获取当前登录用户的 _openid
-    let currentUserOpenId = null;
-    try {
-      if (auth) {
-        const loginState = await auth.getLoginState();
-        
-        // 安全地获取 loginState 的字段（避免循环引用）
-        if (loginState) {
-          appLog('loginState的类型: ' + typeof loginState, 'info');
-          appLog('loginState的所有字段: ' + Object.keys(loginState).join(', '), 'info');
-          
-          // 尝试多种可能的字段名
-          // 腾讯云开发可能使用不同的字段名
-          if (loginState.openid) {
-            currentUserOpenId = loginState.openid;
-            appLog('从 loginState.openid 获取到: ' + currentUserOpenId, 'info');
-          } else if (loginState.uid) {
-            currentUserOpenId = loginState.uid;
-            appLog('从 loginState.uid 获取到: ' + currentUserOpenId, 'info');
-          } else if (loginState.userId) {
-            currentUserOpenId = loginState.userId;
-            appLog('从 loginState.userId 获取到: ' + currentUserOpenId, 'info');
-          } else if (loginState._openid) {
-            currentUserOpenId = loginState._openid;
-            appLog('从 loginState._openid 获取到: ' + currentUserOpenId, 'info');
-          } else if (loginState.credential) {
-            try {
-              currentUserOpenId = loginState.credential.openid || loginState.credential.uid;
-              if (currentUserOpenId) {
-                appLog('从 loginState.credential 获取到: ' + currentUserOpenId, 'info');
-              }
-            } catch (e) {
-              appLog('读取 credential 失败: ' + e.message, 'warning');
-            }
-          } else if (loginState.user) {
-            try {
-              currentUserOpenId = loginState.user.openid || loginState.user.uid;
-              if (currentUserOpenId) {
-                appLog('从 loginState.user 获取到: ' + currentUserOpenId, 'info');
-              }
-            } catch (e) {
-              appLog('读取 user 失败: ' + e.message, 'warning');
-            }
-          }
-          
-          // 如果还是没找到，尝试通过数据库操作获取当前用户的 openid
-          // 腾讯云开发在数据库操作时会自动添加 _openid 字段
-          if (!currentUserOpenId && db) {
-            try {
-              // 尝试创建一个临时文档，然后读取它的 _openid
-              // 或者尝试查询一个已知的文档，从返回结果中获取当前用户的 openid
-              // 但更简单的方法是：检查是否有 getUserInfo 方法
-              if (typeof db.getUserInfo === 'function') {
-                const userInfo = db.getUserInfo();
-                if (userInfo && userInfo.openid) {
-                  currentUserOpenId = userInfo.openid;
-                  appLog('从 db.getUserInfo() 获取到: ' + currentUserOpenId, 'info');
-                }
-              }
-              
-              // 如果还是没找到，尝试通过查询当前活动来获取
-              // 因为查询时会自动添加当前用户的 openid 信息
-              if (!currentUserOpenId && currentActivity && currentActivity._id) {
-                try {
-                  // 尝试查询一个文档，看看返回结果中是否有当前用户信息
-                  // 但这个方法不太可靠，因为我们需要的是当前用户的 openid，而不是文档的 _openid
-                  // 实际上，文档的 _openid 就是创建者的 openid
-                  // 所以我们需要另一种方法
-                  
-                  // 更可靠的方法：通过数据库的规则来获取
-                  // 但腾讯云开发可能不提供直接获取当前用户 openid 的 API
-                  // 所以我们需要依赖 loginState
-                } catch (e) {
-                  appLog('尝试从数据库获取用户信息失败: ' + e.message, 'warning');
-                }
-              }
-            } catch (e) {
-              appLog('尝试从数据库获取用户信息失败: ' + e.message, 'warning');
-            }
-          }
-          
-          appLog('最终获取的当前用户_openid: ' + (currentUserOpenId || '未找到'), currentUserOpenId ? 'success' : 'warning');
-        } else {
-          appLog('loginState 为空', 'warning');
-        }
-      } else {
-        appLog('auth 对象不存在', 'warning');
-      }
-    } catch (e) {
-      appLog('获取当前用户_openid失败: ' + e.message, 'warning');
-      // 不尝试序列化错误对象，避免循环引用
-    }
+    // 注意：不再使用 openid 来判断权限，因为匿名登录的 openid 是基于设备的
+    // 同一台设备上的不同用户会有相同的 openid，无法区分
+    // 改为使用用户名（creator 字段）来判断权限
     
     div.innerHTML = '';
     currentActivityBills.forEach(b => {
@@ -2421,10 +2399,10 @@
       }
       
       // 检查当前用户是否是记录的创建者
-      const billOpenId = b._openid || null;
-      appLog(`费用记录 ${b.title || '未命名'} - billOpenId: ${billOpenId}, currentUserOpenId: ${currentUserOpenId}`, 'info');
-      const isCreator = currentUserOpenId && billOpenId && currentUserOpenId === billOpenId;
-      appLog(`费用记录 ${b.title || '未命名'} - 是否为创建者: ${isCreator}`, 'info');
+      // 使用 creator 字段（用户名）而不是 _openid，因为匿名登录的 openid 是基于设备的
+      const billCreator = b.creator || null;
+      const isCreator = currentUserName && billCreator && currentUserName === billCreator;
+      appLog(`费用记录 ${b.title || '未命名'} - 创建者: ${billCreator}, 当前用户: ${currentUserName}, 是否为创建者: ${isCreator}`, 'info');
       
       // 根据权限设置按钮状态
       const editDisabled = !isCreator ? 'disabled' : '';
@@ -2673,18 +2651,15 @@
     const m = document.getElementById('modalBill');
     const amountInput = document.getElementById('billAmount');
     const titleInput = document.getElementById('billTitle');
-    const categoryInput = document.getElementById('billCategory');
     const payerSelect = document.getElementById('billPayer');
     const remarkInput = document.getElementById('billRemark');
     const timeInput = document.getElementById('billTime');
     const container = document.getElementById('billParticipants');
     const saveBtn = document.getElementById('saveBillBtn');
-    const addParticipantBtn = document.querySelector('button[onclick="addBillParticipant()"]');
     
     // 填充基本信息
     if (amountInput) amountInput.value = billData.amount || '';
     if (titleInput) titleInput.value = billData.title || '';
-    if (categoryInput) categoryInput.value = billData.category || '';
     if (remarkInput) remarkInput.value = billData.remark || '';
     
     // 填充时间
@@ -2719,11 +2694,6 @@
       });
     }
     
-    // 隐藏"添加参与人"按钮
-    if (addParticipantBtn) {
-      addParticipantBtn.style.display = 'none';
-    }
-    
     // 设置所有输入框为只读
     const allInputs = m.querySelectorAll('input, textarea, select');
     allInputs.forEach(input => {
@@ -2745,25 +2715,17 @@
     delete m.dataset.editId;
     
     m.style.display = 'flex';
+    updateBackButton(); // 隐藏返回按钮
   }
   
   // ====== 编辑费用 ======
   async function editBill(billDoc) {
     // 权限检查：只有记录的创建者才能编辑
-    try {
-      if (auth) {
-        const loginState = await auth.getLoginState();
-        if (loginState && loginState.openid) {
-          const billOpenId = billDoc._openid || null;
-          if (billOpenId && loginState.openid !== billOpenId) {
-            showGlobalMessage('您没有权限编辑此费用记录（只有创建者可以编辑）', 'error');
-            return;
-          }
-        }
-      }
-    } catch (e) {
-      appLog('权限检查失败: ' + e.message, 'warning');
-      // 如果权限检查失败，仍然允许编辑（向后兼容）
+    // 使用 creator 字段（用户名）而不是 _openid
+    const billCreator = billDoc.creator || null;
+    if (billCreator && currentUserName && currentUserName !== billCreator) {
+      showGlobalMessage('您没有权限编辑此费用记录（只有创建者可以编辑）', 'error');
+      return;
     }
     // 提取费用ID（支持字符串或对象）
     let billId = null;
@@ -2867,13 +2829,11 @@
     appLog('billData对象: ' + JSON.stringify(billData), 'info');
     appLog('billData.amount: ' + billData.amount + ' (类型: ' + typeof billData.amount + ')', 'info');
     appLog('billData.title: ' + billData.title, 'info');
-    appLog('billData.category: ' + billData.category, 'info');
     appLog('billData.payer: ' + billData.payer, 'info');
     appLog('billData.participants: ' + JSON.stringify(billData.participants), 'info');
     
     const amountInput = document.getElementById('billAmount');
     const titleInput = document.getElementById('billTitle');
-    const categoryInput = document.getElementById('billCategory');
     const remarkInput = document.getElementById('billRemark');
     
     if (!amountInput) {
@@ -2890,12 +2850,6 @@
       appLog('已填充标题: ' + titleInput.value, 'info');
     }
     
-    if (!categoryInput) {
-      appLog('错误：找不到 billCategory 输入框', 'error');
-    } else {
-      categoryInput.value = billData.category || '';
-      appLog('已填充分类: ' + categoryInput.value, 'info');
-    }
     
     if (!remarkInput) {
       appLog('错误：找不到 billRemark 输入框', 'error');
@@ -2994,14 +2948,16 @@
     const header = document.querySelector('#modalBill h3');
     if (header) header.textContent = '编辑费用';
     m.style.display = 'flex';
+    updateBackButton(); // 隐藏返回按钮
   }
   
   // ====== 删除费用 ======
   async function deleteBill(billId, billTitle) {
     // 权限检查：只有记录的创建者才能删除
+    // 使用 creator 字段（用户名）而不是 _openid
     try {
-      if (auth && billId) {
-        // 先获取费用记录以检查 _openid
+      if (billId) {
+        // 先获取费用记录以检查 creator
         const billDoc = await db.collection('bills').doc(billId).get();
         let billData = null;
         if (billDoc && billDoc.data) {
@@ -3013,13 +2969,10 @@
         }
         
         if (billData) {
-          const loginState = await auth.getLoginState();
-          if (loginState && loginState.openid) {
-            const billOpenId = billData._openid || null;
-            if (billOpenId && loginState.openid !== billOpenId) {
-              showGlobalMessage('您没有权限删除此费用记录（只有创建者可以删除）', 'error');
-              return;
-            }
+          const billCreator = billData.creator || null;
+          if (billCreator && currentUserName && currentUserName !== billCreator) {
+            showGlobalMessage('您没有权限删除此费用记录（只有创建者可以删除）', 'error');
+            return;
           }
         }
       }
@@ -3058,7 +3011,6 @@
       showGlobalMessage('金额必须大于 0', 'error');
       return;
     }
-    const category = document.getElementById('billCategory').value.trim();
     const payer = document.getElementById('billPayer').value;
     const timeStr = document.getElementById('billTime').value;
     const remark = document.getElementById('billRemark').value.trim();
@@ -3125,13 +3077,25 @@
       return;
     }
 
-    // 只计算权重大于0的成员的总权重和分摊
+    // 计算所有成员的分摊金额
+    // 权重大于0的成员：按权重比例分摊
+    // 权重为0的成员：金额为0
     const totalWeight = namesWithWeight.reduce((s,n)=>s+participants[n],0);
     const splitDetail = {};
-    namesWithWeight.forEach(n=>{
-      const share = amount * participants[n] / totalWeight;
-      splitDetail[n] = Number(share.toFixed(2));
+    
+    // 为所有成员设置 splitDetail
+    Object.keys(participants).forEach(name => {
+      if (participants[name] > 0 && totalWeight > 0) {
+        // 权重大于0的成员：按权重比例计算
+        const share = amount * participants[name] / totalWeight;
+        splitDetail[name] = Number(share.toFixed(2));
+      } else {
+        // 权重为0的成员：金额为0
+        splitDetail[name] = 0;
+      }
     });
+    
+    appLog('计算的 splitDetail (包含所有成员): ' + JSON.stringify(splitDetail), 'info');
 
     try {
       const m = document.getElementById('modalBill');
@@ -3144,7 +3108,6 @@
         appLog('更新费用 - 准备更新的数据: ' + JSON.stringify({
           amount,
           title,
-          category,
           payer,
           participants,
           splitDetail,
@@ -3163,13 +3126,32 @@
           });
           appLog('清理后的 participants: ' + JSON.stringify(cleanParticipants), 'info');
           
+          // 根据清理后的 participants 重新计算 splitDetail
+          // 包含所有成员，权重为0的成员金额为0
+          const namesWithWeightClean = Object.keys(cleanParticipants).filter(name => cleanParticipants[name] > 0);
+          const totalWeightClean = namesWithWeightClean.reduce((s, n) => s + cleanParticipants[n], 0);
+          const splitDetailClean = {};
+          
+          // 为所有成员设置 splitDetail
+          Object.keys(cleanParticipants).forEach(name => {
+            if (cleanParticipants[name] > 0 && totalWeightClean > 0) {
+              // 权重大于0的成员：按权重比例计算
+              const share = amount * cleanParticipants[name] / totalWeightClean;
+              splitDetailClean[name] = Number(share.toFixed(2));
+            } else {
+              // 权重为0的成员：金额为0
+              splitDetailClean[name] = 0;
+            }
+          });
+          
+          appLog('重新计算的 splitDetail (包含所有成员): ' + JSON.stringify(splitDetailClean), 'info');
+          
           const updateData = {
             amount: Number(amount) || 0,
             title: String(title || ''),
-            category: String(category || ''),
             payer: String(payer || ''),
             participants: cleanParticipants,
-            splitDetail: splitDetail || {},
+            splitDetail: splitDetailClean, // 使用重新计算的 splitDetail
             time: timeStr ? new Date(timeStr) : new Date(),
             remark: String(remark || ''),
             updatedAt: new Date()
@@ -3197,15 +3179,34 @@
               }
               
               if (existingData) {
+                // 重新计算 splitDetail（基于清理后的 participants）
+                // 包含所有成员，权重为0的成员金额为0
+                const namesWithWeightClean = Object.keys(cleanParticipants).filter(name => cleanParticipants[name] > 0);
+                const totalWeightClean = namesWithWeightClean.reduce((s, n) => s + cleanParticipants[n], 0);
+                const splitDetailClean = {};
+                
+                // 为所有成员设置 splitDetail
+                Object.keys(cleanParticipants).forEach(name => {
+                  if (cleanParticipants[name] > 0 && totalWeightClean > 0) {
+                    // 权重大于0的成员：按权重比例计算
+                    const share = amount * cleanParticipants[name] / totalWeightClean;
+                    splitDetailClean[name] = Number(share.toFixed(2));
+                  } else {
+                    // 权重为0的成员：金额为0
+                    splitDetailClean[name] = 0;
+                  }
+                });
+                
+                appLog('set方法 - 重新计算的 splitDetail (包含所有成员): ' + JSON.stringify(splitDetailClean), 'info');
+                
                 // 合并数据，保留原有字段（如 _id, _openid, activityId, createdAt）
                 const mergedData = {
                   ...existingData,
                   amount,
                   title,
-                  category,
                   payer,
-                  participants,
-                  splitDetail,
+                  participants: cleanParticipants, // 使用清理后的 participants
+                  splitDetail: splitDetailClean, // 使用重新计算的 splitDetail
                   time: timeStr ? new Date(timeStr) : new Date(),
                   remark,
                   updatedAt: new Date()
@@ -3226,9 +3227,29 @@
                   appLog('set 方法失败，尝试使用 update 方法逐个字段更新: ' + setError1.message, 'warning');
                   // 方法2：如果 set 失败，尝试使用 update 方法，但分别更新每个字段
                   try {
+                    // 重新计算 splitDetail（基于清理后的 participants）
+                    // 包含所有成员，权重为0的成员金额为0
+                    const namesWithWeightClean = Object.keys(cleanParticipants).filter(name => cleanParticipants[name] > 0);
+                    const totalWeightClean = namesWithWeightClean.reduce((s, n) => s + cleanParticipants[n], 0);
+                    const splitDetailClean = {};
+                    
+                    // 为所有成员设置 splitDetail
+                    Object.keys(cleanParticipants).forEach(name => {
+                      if (cleanParticipants[name] > 0 && totalWeightClean > 0) {
+                        // 权重大于0的成员：按权重比例计算
+                        const share = amount * cleanParticipants[name] / totalWeightClean;
+                        splitDetailClean[name] = Number(share.toFixed(2));
+                      } else {
+                        // 权重为0的成员：金额为0
+                        splitDetailClean[name] = 0;
+                      }
+                    });
+                    
+                    appLog('分步更新 - 重新计算的 splitDetail (包含所有成员): ' + JSON.stringify(splitDetailClean), 'info');
+                    
                     // 先更新 participants（这是最关键的字段）
                     const updateParticipants = await db.collection('bills').doc(editId).update({
-                      participants: participants
+                      participants: cleanParticipants
                     });
                     appLog('单独更新 participants 结果: ' + JSON.stringify(updateParticipants), 'info');
                     
@@ -3237,9 +3258,8 @@
                       await db.collection('bills').doc(editId).update({
                         amount,
                         title,
-                        category,
                         payer,
-                        splitDetail,
+                        splitDetail: splitDetailClean, // 使用重新计算的 splitDetail
                         time: timeStr ? new Date(timeStr) : new Date(),
                         remark,
                         updatedAt: new Date()
@@ -3325,12 +3345,12 @@
           activityId: actId,
           amount,
           title,
-          category,
           payer,
           participants,
           splitDetail,
           time: timeStr ? new Date(timeStr) : new Date(),
           remark,
+          creator: currentUserName, // 保存创建者用户名
           createdAt: new Date()
         };
         await db.collection('bills').add(billDoc);
