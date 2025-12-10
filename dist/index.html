@@ -359,7 +359,7 @@
 
   <!-- 顶部：当前用户 -->
   <div class="card" id="userCard">
-    <h2 style="color: #28a745; text-align: center; margin-bottom: 20px;">醵金合宴</h2>
+    <h2 style="color: #28a745; text-align: center; margin-bottom: 20px;">题名登塔喜，醵宴为花忙</h2>
     <div>
       <label>用户名：</label>
       <input id="inputUserName" placeholder="输入你的名字，如：唐朝奎" />
@@ -409,20 +409,14 @@
     <!-- Tab -->
     <div class="card">
       <div class="tabs">
-        <div id="tabMembers" class="tab" onclick="switchActivityTab('members')">成员</div>
-        <div id="tabBills" class="tab tab-active" onclick="switchActivityTab('bills')">费用</div>
+        <div id="tabBills" class="tab tab-active" onclick="switchActivityTab('bills')">账单</div>
         <div id="tabSummary" class="tab" onclick="switchActivityTab('summary')">结算</div>
       </div>
 
-      <!-- 费用 TAB -->
+      <!-- 账单 TAB -->
       <div id="tabContentBills">
         <div id="billList"></div>
-        <button class="btn btn-full" style="margin-top:8px;" onclick="showBillModal()">+ 添加费用</button>
-      </div>
-
-      <!-- 成员 TAB -->
-      <div id="tabContentMembers" class="hidden">
-        <div id="memberList"></div>
+        <button class="btn btn-full" style="margin-top:8px;" onclick="showBillModal()">+ 添加账单</button>
       </div>
 
       <!-- 结算 TAB -->
@@ -477,7 +471,7 @@
 <div id="modalBill" class="modal">
   <div class="modal-content">
     <div class="modal-header">
-      <h3>添加费用</h3>
+      <h3>添加账单</h3>
       <button class="btn btn-secondary" onclick="closeBillModal()">关闭</button>
     </div>
     <label>金额（元）</label>
@@ -492,7 +486,7 @@
     <div id="billParticipants"></div>
     <label>备注</label>
     <textarea id="billRemark" rows="2"></textarea>
-    <button class="btn btn-full" onclick="saveBill()" id="saveBillBtn">保存费用</button>
+    <button class="btn btn-full" onclick="saveBill()" id="saveBillBtn">保存账单</button>
   </div>
 </div>
 
@@ -505,6 +499,19 @@
       <div style="display: flex; gap: 12px; justify-content: center;">
         <button class="btn btn-secondary" id="confirmDeleteCancel" style="flex: 1;">取消</button>
         <button class="btn" id="confirmDeleteOk" style="flex: 1; background: #c5221f;">确认删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 提示对话框 -->
+<div id="alertModal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width: 400px;">
+    <div style="text-align: center; padding: 20px;">
+      <h3 style="margin-bottom: 16px;">提示</h3>
+      <p id="alertMessage" style="margin-bottom: 20px; font-size: 14px; color: #333;"></p>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button class="btn" id="alertOk" style="flex: 1; background: #007bff;" tabindex="0">确定</button>
       </div>
     </div>
   </div>
@@ -1719,7 +1726,7 @@
     
     // 恢复标题
     const header = document.querySelector('#modalBill h3');
-    if (header) header.textContent = '添加费用';
+    if (header) header.textContent = '添加账单';
     
     // 清除编辑ID
     delete m.dataset.editId;
@@ -2155,6 +2162,51 @@
     updateBackButton(); // 隐藏返回按钮
   }
   
+  // ====== 提示对话框 ======
+  function showAlertDialog(message) {
+    const modal = document.getElementById('alertModal');
+    const messageEl = document.getElementById('alertMessage');
+    const okBtn = document.getElementById('alertOk');
+    
+    if (!modal || !messageEl || !okBtn) {
+      console.error('提示对话框元素不存在');
+      return;
+    }
+    
+    messageEl.textContent = message;
+    modal.style.display = 'flex';
+    
+    // 将焦点设置到确定按钮上（使用 requestAnimationFrame 确保在 DOM 更新后设置焦点）
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        okBtn.focus();
+        // 如果焦点没有设置成功，再尝试一次
+        if (document.activeElement !== okBtn) {
+          setTimeout(() => {
+            okBtn.focus();
+          }, 50);
+        }
+      }, 50);
+    });
+    
+    // 移除之前的事件监听器，添加新的事件监听器
+    const newOkHandler = () => {
+      modal.style.display = 'none';
+      okBtn.removeEventListener('click', newOkHandler);
+    };
+    okBtn.addEventListener('click', newOkHandler);
+    
+    // 点击背景关闭
+    const newBgHandler = (e) => {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+        modal.removeEventListener('click', newBgHandler);
+        okBtn.removeEventListener('click', newOkHandler);
+      }
+    };
+    modal.addEventListener('click', newBgHandler);
+  }
+
   // ====== 自定义确认对话框 ======
   function showConfirmDialog(message, onConfirm) {
     const modal = document.getElementById('confirmDeleteModal');
@@ -2275,7 +2327,6 @@
       currentActivityBalances = calcBalancesForActivity();
 
       await renderBills();
-      renderMembers();
       renderSummary();
     } catch (e) {
       console.error('加载活动数据失败:', e);
@@ -2313,7 +2364,7 @@
   async function renderBills() {
     const div = document.getElementById('billList');
     if (!currentActivityBills.length) {
-      div.innerHTML = '<div class="small">暂无费用记录</div>';
+      div.innerHTML = '<div class="small">暂无账单记录</div>';
       return;
     }
     
@@ -2321,8 +2372,24 @@
     // 同一台设备上的不同用户会有相同的 openid，无法区分
     // 改为使用用户名（creator 字段）来判断权限
     
+    // 按照发生日期（time字段）从最近到最远排序
+    const sortedBills = [...currentActivityBills].sort((a, b) => {
+      const getDate = (bill) => {
+        if (bill.time) {
+          return bill.time.toDate ? bill.time.toDate() : new Date(bill.time);
+        }
+        if (bill.createdAt) {
+          return bill.createdAt.toDate ? bill.createdAt.toDate() : new Date(bill.createdAt);
+        }
+        return new Date(0); // 如果没有日期，排到最后
+      };
+      const dateA = getDate(a);
+      const dateB = getDate(b);
+      return dateB - dateA; // 降序：最近的在前面
+    });
+    
     div.innerHTML = '';
-    currentActivityBills.forEach(b => {
+    sortedBills.forEach(b => {
       // 只显示费用名称
       const billTitle = b.title || '未命名';
       
@@ -2353,39 +2420,67 @@
         const displayedSurnames = surnames.slice(0, maxDisplay);
         const remainingCount = surnames.length > maxDisplay ? surnames.slice(maxDisplay).reduce((sum, s) => sum + surnameMap[s], 0) : 0;
         
-        // 生成姓氏圆（重叠20%）
-        const surnameCircles = displayedSurnames.map((surname, index) => {
-          // 检查这个姓氏对应的所有成员中是否有付款人
-          const hasPayer = Object.keys(b.participants).some(name => 
-            getSurname(name) === surname && b.participants[name] > 0 && b.payer === name
-          );
-          // 如果有付款人，用蓝色；否则用土黄色
-          const color = hasPayer ? '#007bff' : '#D4A574'; // 蓝色或土黄色
-          
-          // 第一个圆不重叠，后续圆重叠20%（32px * 0.2 ≈ 6.4px，用-6px）
-          const marginLeft = index === 0 ? '0' : '-6px';
-          
-          return `
-            <span style="
-              display: inline-flex;
-              align-items: center;
-              justify-content: center;
-              width: 32px;
-              height: 32px;
-              border-radius: 50%;
-              background-color: ${color};
-              color: white;
-              font-weight: bold;
-              font-size: 14px;
-              margin-left: ${marginLeft};
-              border: 2px solid white;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-              position: relative;
-              z-index: ${10 - index};
-              flex-shrink: 0;
-            ">${surname}</span>
-          `;
-        }).join('');
+        // 生成姓氏圆（重叠30%），不足3个时用虚线圆补齐
+        const circles = [];
+        for (let i = 0; i < maxDisplay; i++) {
+          if (i < displayedSurnames.length) {
+            // 有实际姓氏的圆
+            const surname = displayedSurnames[i];
+            // 检查这个姓氏对应的所有成员中是否有付款人
+            const hasPayer = Object.keys(b.participants).some(name => 
+              getSurname(name) === surname && b.participants[name] > 0 && b.payer === name
+            );
+            // 如果有付款人，用蓝色；否则用土黄色
+            const color = hasPayer ? '#007bff' : '#D4A574'; // 蓝色或土黄色
+            
+            // 第一个圆不重叠，后续圆重叠30%（22.4px * 0.3 ≈ 6.7px，用-7px）
+            const marginLeft = i === 0 ? '0' : '-7px';
+            
+            circles.push(`
+              <span style="
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22.4px;
+                height: 22.4px;
+                border-radius: 50%;
+                background-color: ${color};
+                color: white;
+                font-weight: bold;
+                font-size: 10px;
+                margin-left: ${marginLeft};
+                border: 1.4px solid white;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                position: relative;
+                z-index: ${10 - i};
+                flex-shrink: 0;
+              ">${surname}</span>
+            `);
+          } else {
+            // 虚线圆（浅灰色）
+            const marginLeft = i === 0 ? '0' : '-7px';
+            circles.push(`
+              <span style="
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22.4px;
+                height: 22.4px;
+                border-radius: 50%;
+                background-color: #f0f0f0;
+                color: #d0d0d0;
+                font-weight: bold;
+                font-size: 10px;
+                margin-left: ${marginLeft};
+                border: 1.4px dashed #d0d0d0;
+                position: relative;
+                z-index: ${10 - i};
+                flex-shrink: 0;
+              "></span>
+            `);
+          }
+        }
+        const surnameCircles = circles.join('');
         
         // 如果有超过3个姓氏，显示+N
         let extraInfo = '';
@@ -2393,9 +2488,34 @@
           extraInfo = `<span style="font-size: 12px; color: #666; margin-left: 4px;">+${remainingCount}</span>`;
         }
         
-        participantsHtml = surnameCircles + extraInfo || '<span class="small">无参与成员</span>';
+        // 权重和数字单独显示，不跟在圆后面
+        participantsHtml = surnameCircles + extraInfo;
       } else {
-        participantsHtml = '<span class="small">无参与成员</span>';
+        // 没有参与成员时，显示3个虚线圆
+        const emptyCircles = [];
+        for (let i = 0; i < 3; i++) {
+          const marginLeft = i === 0 ? '0' : '-7px';
+          emptyCircles.push(`
+            <span style="
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              width: 22.4px;
+              height: 22.4px;
+              border-radius: 50%;
+              background-color: #f0f0f0;
+              color: #d0d0d0;
+              font-weight: bold;
+              font-size: 10px;
+              margin-left: ${marginLeft};
+              border: 1.4px dashed #d0d0d0;
+              position: relative;
+              z-index: ${10 - i};
+              flex-shrink: 0;
+            "></span>
+          `);
+        }
+        participantsHtml = emptyCircles.join('');
       }
       
       // 检查当前用户是否是记录的创建者
@@ -2410,28 +2530,52 @@
       const editStyle = !isCreator ? 'padding: 4px 8px; font-size: 12px; opacity: 0.5; cursor: not-allowed;' : 'padding: 4px 8px; font-size: 12px;';
       const deleteStyle = !isCreator ? 'padding: 4px 8px; font-size: 12px; background: #c5221f; opacity: 0.5; cursor: not-allowed;' : 'padding: 4px 8px; font-size: 12px; background: #c5221f;';
       
+      // 格式化日期：yyyy.mm.dd
+      const formatBillDate = (bill) => {
+        const date = bill.time ? (bill.time.toDate ? bill.time.toDate() : new Date(bill.time)) : (bill.createdAt ? (bill.createdAt.toDate ? bill.createdAt.toDate() : new Date(bill.createdAt)) : new Date());
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}.${month}.${day}`;
+      };
+      const billDate = formatBillDate(b);
+      
+      // 根据创建者身份决定点击事件：创建者进入编辑，其他人进入浏览
+      const clickHandler = isCreator 
+        ? `editBill(${JSON.stringify(b).replace(/"/g, '&quot;')})`
+        : `viewBillDetail(${JSON.stringify(b).replace(/"/g, '&quot;')})`;
+      
+      // 计算3个圆的位置宽度：第一个圆22.4px + 第二个圆重叠后约15.4px + 第三个圆重叠后约15.4px = 约53px
+      // 权重和数字位置：在3个圆后面，固定位置
+      const circlesContainerWidth = '53px'; // 3个圆的位置
+      const weightSumWidth = '30px'; // 权重和数字的固定位置
+      
       const billDiv = document.createElement('div');
       billDiv.className = 'bill-item';
-      // 左侧内容可点击查看详情（不受权限限制）
       billDiv.innerHTML = `
-        <div class="row">
-          <div style="flex: 1; min-width: 0; cursor: pointer;" onclick="viewBillDetail(${JSON.stringify(b).replace(/"/g, '&quot;')})">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-              <div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 2px;">
-                ${participantsHtml}
+        <div class="row" style="align-items: center;">
+          <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 2px; cursor: pointer; flex-shrink: 0; width: ${circlesContainerWidth}; justify-content: flex-start;" onclick="${clickHandler}">
+              ${participantsHtml}
+            </div>
+            <div style="display: flex; align-items: center; flex-shrink: 0; width: ${weightSumWidth}; justify-content: flex-start; font-size: 11px; color: #666; font-weight: 500; margin-left: 8px;">
+              ${b.participants ? totalCount : '0'}
+            </div>
+            <div style="flex: 1; cursor: pointer; min-width: 0; margin-left: -11px;" onclick="${clickHandler}">
+              <div style="font-size: 11px; color: #333; line-height: 1.3;">
+                ${billTitle}
+              </div>
+              <div style="font-size: 10px; color: #999; line-height: 1.3; margin-top: 2px;">
+                ${billDate}
               </div>
             </div>
-            <div style="margin-bottom: 4px;">
-              <strong style="font-size: 15px;">${billTitle}</strong>
-            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-            <div style="font-size: 16px; font-weight: bold; color: #137333;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <div style="font-size: 11px; font-weight: bold; color: #137333;">
               ¥${Number(b.amount || 0).toFixed(2)}
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-secondary" ${editDisabled} onclick="${isCreator ? `editBill(${JSON.stringify(b).replace(/"/g, '&quot;')})` : 'return false;'}" style="${editStyle}">编辑</button>
-              <button class="btn btn-secondary" ${deleteDisabled} onclick="${isCreator ? `deleteBill('${b._id}', '${(b.title || '未命名').replace(/'/g, "\\'")}')` : 'return false;'}" style="${deleteStyle}">删除</button>
+              <button class="btn btn-secondary" ${deleteDisabled} onclick="event.stopPropagation(); ${isCreator ? `deleteBill('${b._id}', '${(b.title || '未命名').replace(/'/g, "\\'")}')` : 'return false;'}" style="${deleteStyle}">删除</button>
             </div>
           </div>
         </div>
@@ -2443,6 +2587,10 @@
   // ====== 成员+余额渲染 ======
   function renderMembers() {
     const div = document.getElementById('memberList');
+    // 如果 memberList 元素不存在（已删除成员Tab），直接返回
+    if (!div) {
+      return;
+    }
     const members = currentActivity.members || [];
     if (!members.length) {
       div.innerHTML = '<div class="small">无成员</div>';
@@ -2508,17 +2656,44 @@
     const members = currentActivity.members || [];
 
     if (!bills.length) {
-      div.innerHTML = '<div class="small">暂无费用记录</div>';
+      div.innerHTML = '<div class="small">暂无账单记录</div>';
       return;
     }
 
     const total = bills.reduce((s,b)=>s+Number(b.amount||0),0);
     const totalWeight = members.reduce((s,m)=>s+Number(m.weight||2),0) || 1;
     const avg = total / totalWeight;
+    
+    // 计算最早的账单日期
+    let earliestDate = null;
+    bills.forEach(b => {
+      const billDate = b.time ? (b.time.toDate ? b.time.toDate() : new Date(b.time)) : (b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : null);
+      if (billDate) {
+        if (!earliestDate || billDate < earliestDate) {
+          earliestDate = billDate;
+        }
+      }
+    });
+    
+    // 格式化日期范围显示
+    let dateRangeText = '';
+    if (earliestDate) {
+      const formatDate = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      const today = new Date();
+      dateRangeText = `${formatDate(earliestDate)} 至 ${formatDate(today)}`;
+    } else {
+      dateRangeText = '至今';
+    }
 
     let html = `
       <div class="card" style="margin:0 0 8px 0;">
         <div>总支出：<span class="amount">¥${total.toFixed(2)}</span></div>
+        <div class="small">${dateRangeText} | 账单数量：${bills.length} 条</div>
         <div class="small">按权重人均：¥${avg.toFixed(2)} / 权重1人</div>
       </div>
       <div>
@@ -2544,6 +2719,31 @@
       `;
     });
     html += '</div>';
+    
+    // 建议下一次买单人员（余额最大的成员，即应付和实付差值最大）
+    let maxBalanceMember = null;
+    let maxBalance = -Infinity;
+    Object.keys(currentActivityBalances).forEach(name => {
+      const bal = currentActivityBalances[name];
+      // 余额 = 应付 - 实付，余额最大即差值最大
+      if (bal.balance > maxBalance) {
+        maxBalance = bal.balance;
+        maxBalanceMember = name;
+      }
+    });
+    
+    if (maxBalanceMember !== null) {
+      const memberBal = currentActivityBalances[maxBalanceMember];
+      html += `
+        <div class="card" style="margin-top: 16px; padding: 12px; background-color: #f0f7ff; border-left: 4px solid #007bff;">
+          <div style="font-weight: 500; margin-bottom: 4px;">建议下一次买单人员</div>
+          <div class="small" style="color: #666;">
+            <span style="color: #007bff; font-weight: bold;">${maxBalanceMember}</span> 应付：¥${memberBal.shouldPay.toFixed(2)}，实付：¥${memberBal.paid.toFixed(2)}
+          </div>
+        </div>
+      `;
+    }
+    
     div.innerHTML = html;
   }
 
@@ -2574,10 +2774,10 @@
       }
     });
 
-    // 余额：应付 - 实付（负数表示欠款，正数表示应收）
+    // 余额：实付 - 应付（正数表示多付，负数表示少付）
     Object.keys(map).forEach(name=>{
       const v = map[name];
-      v.balance = v.shouldPay - v.paid;
+      v.balance = v.paid - v.shouldPay;
     });
 
     return map;
@@ -2738,7 +2938,7 @@
     
     // 更新标题
     const header = document.querySelector('#modalBill h3');
-    if (header) header.textContent = '费用详情';
+    if (header) header.textContent = '账单详情';
     
     // 清除编辑ID，确保不会触发更新
     delete m.dataset.editId;
@@ -2753,7 +2953,7 @@
     // 使用 creator 字段（用户名）而不是 _openid
     const billCreator = billDoc.creator || null;
     if (billCreator && currentUserName && currentUserName !== billCreator) {
-      showGlobalMessage('您没有权限编辑此费用记录（只有创建者可以编辑）', 'error');
+      showGlobalMessage('您没有权限编辑此账单记录（只有创建者可以编辑）', 'error');
       return;
     }
     // 提取费用ID（支持字符串或对象）
@@ -2973,9 +3173,9 @@
     m.dataset.editId = billId;
     // 更新按钮和标题文本
     const btn = document.getElementById('saveBillBtn');
-    if (btn) btn.textContent = '更新费用';
+    if (btn) btn.textContent = '更新账单';
     const header = document.querySelector('#modalBill h3');
-    if (header) header.textContent = '编辑费用';
+    if (header) header.textContent = '编辑账单';
     m.style.display = 'flex';
     updateBackButton(); // 隐藏返回按钮
   }
@@ -3000,7 +3200,7 @@
         if (billData) {
           const billCreator = billData.creator || null;
           if (billCreator && currentUserName && currentUserName !== billCreator) {
-            showGlobalMessage('您没有权限删除此费用记录（只有创建者可以删除）', 'error');
+            showGlobalMessage('您没有权限删除此账单记录（只有创建者可以删除）', 'error');
             return;
           }
         }
@@ -3010,18 +3210,18 @@
       // 如果权限检查失败，仍然允许删除（向后兼容）
     }
     
-    showConfirmDialog(`确定要删除费用"${billTitle}"吗？此操作不可恢复！`, async function() {
+    showConfirmDialog(`确定要删除账单"${billTitle}"吗？此操作不可恢复！`, async function() {
       if (!db) {
         showGlobalMessage('数据库未初始化，请等待初始化完成', 'error');
         return;
       }
       try {
         await db.collection('bills').doc(billId).remove();
-        showGlobalMessage('费用已删除');
+        showGlobalMessage('账单已删除');
         await reloadActivityData();
       } catch (e) {
         appLog('删除费用失败: ' + e.message, 'error');
-        showGlobalMessage('删除费用失败：' + e.message, 'error');
+        showGlobalMessage('删除账单失败：' + e.message, 'error');
       }
     });
   }
@@ -3035,7 +3235,17 @@
     }
     const actId = currentActivity._id;
     const amount = Number(document.getElementById('billAmount').value || 0);
-    const title = document.getElementById('billTitle').value.trim() || '未命名';
+    const titleInput = document.getElementById('billTitle');
+    const title = titleInput.value.trim() || '未命名';
+    
+    // 检查账单名称长度（最大7个汉字）
+    const titleLength = title.length;
+    if (titleLength > 7) {
+      showAlertDialog('账单名称不能超过7个汉字，请修改后重试。');
+      // 不在这里设置焦点，让对话框的确定按钮获得焦点
+      return;
+    }
+    
     if (!amount || amount <= 0) {
       showGlobalMessage('金额必须大于 0', 'error');
       return;
@@ -3367,7 +3577,7 @@
         
         delete m.dataset.editId;
         closeBillModal();
-        showGlobalMessage('费用已更新');
+        showGlobalMessage('账单已更新');
       } else {
         // 创建费用
         const billDoc = {
@@ -3384,19 +3594,19 @@
         };
         await db.collection('bills').add(billDoc);
         closeBillModal();
-        showGlobalMessage('费用已保存');
+        showGlobalMessage('账单已保存');
       }
       await reloadActivityData();
     } catch (e) {
       appLog('保存费用失败: ' + e.message, 'error');
-      showGlobalMessage('保存费用失败：' + e.message, 'error');
+      showGlobalMessage('保存账单失败：' + e.message, 'error');
     }
   }
 
 
   // ====== Tab 切换 ======
   function switchActivityTab(tab) {
-    const tabs = ['bills','members','summary'];
+    const tabs = ['bills','summary'];
     tabs.forEach(t=>{
       document.getElementById('tab'+capitalize(t)).classList.remove('tab-active');
       document.getElementById('tabContent'+capitalize(t)).classList.add('hidden');
