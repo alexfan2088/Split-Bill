@@ -2720,25 +2720,25 @@
     });
     html += '</div>';
     
-    // 建议下一次买单人员（余额最大的成员，即应付和实付差值最大）
-    let maxBalanceMember = null;
-    let maxBalance = -Infinity;
+    // 建议下一次买单人员（余额最小的成员，即欠款最多的人）
+    let minBalanceMember = null;
+    let minBalance = Infinity;
     Object.keys(currentActivityBalances).forEach(name => {
       const bal = currentActivityBalances[name];
-      // 余额 = 应付 - 实付，余额最大即差值最大
-      if (bal.balance > maxBalance) {
-        maxBalance = bal.balance;
-        maxBalanceMember = name;
+      // 余额 = 实付 - 应付，余额最小即欠款最多
+      if (bal.balance < minBalance) {
+        minBalance = bal.balance;
+        minBalanceMember = name;
       }
     });
     
-    if (maxBalanceMember !== null) {
-      const memberBal = currentActivityBalances[maxBalanceMember];
+    if (minBalanceMember !== null) {
+      const memberBal = currentActivityBalances[minBalanceMember];
       html += `
         <div class="card" style="margin-top: 16px; padding: 12px; background-color: #f0f7ff; border-left: 4px solid #007bff;">
           <div style="font-weight: 500; margin-bottom: 4px;">建议下一次买单人员</div>
           <div class="small" style="color: #666;">
-            <span style="color: #007bff; font-weight: bold;">${maxBalanceMember}</span> 应付：¥${memberBal.shouldPay.toFixed(2)}，实付：¥${memberBal.paid.toFixed(2)}
+            <span style="color: #007bff; font-weight: bold;">${minBalanceMember}</span> 应付：¥${memberBal.shouldPay.toFixed(2)}，实付：¥${memberBal.paid.toFixed(2)}
           </div>
         </div>
       `;
