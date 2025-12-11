@@ -1,0 +1,323 @@
+// pages/login/login.js
+const db = require('../../utils/db.js');
+const app = getApp();
+
+Page({
+  data: {
+    userName: '',
+    password: '',
+    realPassword: '', // 保存真实密码
+    confirmPassword: '',
+    showPassword: false,
+    showConfirmPassword: false,
+    showPasswordText: false, // true: 显示真实密码, false: 显示星号
+    statusText: '',
+    statusTextColor: '',
+    passwordErrorCount: {}, // 记录每个用户名的密码错误次数
+    lastUserName: '', // 记录上次输入的用户名
+  },
+  
+  onLoad() {
+    // 检查是否已登录
+    const userName = wx.getStorageSync('aa_user_name');
+    const savedPasswordHashed = wx.getStorageSync('aa_user_password');
+    const savedPasswordPlain = wx.getStorageSync('aa_user_password_plain');
+    
+    if (userName && savedPasswordHashed) {
+      // 有保存的用户名和密码，自动填充（但不自动登录，需要用户点击登录按钮）
+      const realPwd = savedPasswordPlain || '';
+      console.log('加载保存的密码 - realPwd:', realPwd ? '有密码' : '无密码');
+      this.setData({ 
+        userName: userName,
+        password: '******', // 默认显示星号
+        realPassword: realPwd, // 保存真实密码
+        showPassword: true,
+        showConfirmPassword: false,
+        showPasswordText: false, // 默认显示星号
+        statusText: '已保存用户信息，点击"登录/注册"即可快速登录',
+        statusTextColor: 'blue'
+      });
+    } else if (userName) {
+      // 只有用户名，填充用户名
+      this.setData({ userName });
+    }
+  },
+  
+  onUserNameInput(e) {
+    const userName = e.detail.value.trim();
+    this.setData({ userName });
+    
+    // 如果用户名改变，重置错误计数
+    if (userName !== this.data.lastUserName && this.data.passwordErrorCount[userName]) {
+      const passwordErrorCount = { ...this.data.passwordErrorCount };
+      passwordErrorCount[userName] = 0;
+      this.setData({ passwordErrorCount });
+    }
+    this.setData({ lastUserName: userName });
+    
+    // 清空状态文本
+    this.setData({ statusText: '', statusTextColor: '' });
+  },
+  
+  onPasswordInput(e) {
+    const inputValue = e.detail.value;
+    // 如果当前显示的是星号，用户输入时清空星号并显示真实密码
+    if (!this.data.showPasswordText && this.data.password === '******') {
+      this.setData({
+        password: inputValue,
+        realPassword: inputValue,
+        showPasswordText: true // 用户输入时自动显示真实密码
+      });
+    } else {
+      // 正常更新密码
+      this.setData({
+        password: inputValue,
+        realPassword: inputValue
+      });
+    }
+  },
+  
+  onConfirmPasswordInput(e) {
+    this.setData({ confirmPassword: e.detail.value });
+  },
+  
+  togglePassword() {
+    const willShow = !this.data.showPasswordText;
+    // 获取真实密码（如果realPassword为空，尝试从本地存储获取）
+    let realPwd = this.data.realPassword;
+    if (!realPwd) {
+      realPwd = wx.getStorageSync('aa_user_password_plain') || '';
+    }
+    
+    console.log('切换密码显示 - willShow:', willShow, 'realPassword:', realPwd);
+    
+    // 切换显示/隐藏
+    this.setData({
+      showPasswordText: willShow,
+      password: willShow ? realPwd : '******',
+      realPassword: realPwd // 确保realPassword有值
+    });
+  },
+  
+  async handleLoginOrRegister() {
+    const userName = this.data.userName.trim();
+    // 使用真实密码进行登录/注册
+    const password = this.data.realPassword || this.data.password;
+    const confirmPassword = this.data.confirmPassword;
+    
+    if (!userName) {
+      wx.showToast({
+        title: '请输入用户名',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    wx.showLoading({
+      title: '处理中...'
+    });
+    
+    try {
+      // 直接使用数据库查询（新环境应该已经授权）
+      const dbCloud = wx.cloud.database();
+      const userRes = await dbCloud.collection('users')
+        .where({ name: userName })
+        .limit(1)
+        .get();
+      
+      const userExists = userRes.data && userRes.data.length > 0;
+      
+      if (userExists) {
+        // 用户已存在，执行登录流程
+        if (!this.data.showPassword) {
+          // 显示密码输入框
+          this.setData({
+            showPassword: true,
+            showConfirmPassword: false,
+            statusText: '该用户名已注册，请输入密码登录',
+            statusTextColor: 'blue'
+          });
+          wx.hideLoading();
+          return;
+        }
+        
+        if (!password) {
+          wx.hideLoading();
+          wx.showToast({
+            title: '请输入密码',
+            icon: 'none'
+          });
+          return;
+        }
+        
+        // 直接使用数据库执行登录
+        const result = await db.login(userName, password);
+        wx.hideLoading();
+        
+        if (result.success) {
+          // 重置错误计数
+          const passwordErrorCount = { ...this.data.passwordErrorCount };
+          passwordErrorCount[userName] = 0;
+          this.setData({ passwordErrorCount });
+          
+          // 更新全局数据
+          app.globalData.currentUserName = userName;
+          
+          wx.showToast({
+            title: '登录成功',
+            icon: 'success'
+          });
+          
+          // 跳转到首页
+          setTimeout(() => {
+            wx.redirectTo({
+              url: '/pages/home/home'
+            });
+          }, 1500);
+        } else {
+          // 密码错误
+          const passwordErrorCount = { ...this.data.passwordErrorCount };
+          if (!passwordErrorCount[userName]) {
+            passwordErrorCount[userName] = 0;
+          }
+          passwordErrorCount[userName]++;
+          
+          const errorCount = passwordErrorCount[userName];
+          this.setData({ passwordErrorCount });
+          
+          if (errorCount >= 3) {
+            // 错误3次，提示用户更换用户名
+            wx.showModal({
+              title: '提示',
+              content: `密码错误3次。该用户名可能已被他人使用，请更换用户名（如：${userName}123）后重新注册`,
+              showCancel: false,
+              confirmText: '确定',
+              success: () => {
+                // 重置错误计数
+                passwordErrorCount[userName] = 0;
+                this.setData({
+                  passwordErrorCount,
+                  userName: '',
+                  password: '',
+                  showPassword: false,
+                  statusText: '',
+                  statusTextColor: ''
+                });
+              }
+            });
+          } else {
+            const remaining = 3 - errorCount;
+            wx.showToast({
+              title: `密码错误，还可尝试 ${remaining} 次`,
+              icon: 'none',
+              duration: 2000
+            });
+            this.setData({
+              password: '',
+              statusText: `密码错误，还可尝试 ${remaining} 次`,
+              statusTextColor: 'red'
+            });
+          }
+        }
+      } else {
+        // 用户不存在，执行注册流程
+        if (!this.data.showPassword) {
+          // 显示密码和确认密码输入框
+          this.setData({
+            showPassword: true,
+            showConfirmPassword: true,
+            statusText: '该用户名未注册，请设置密码完成注册',
+            statusTextColor: 'green'
+          });
+          wx.hideLoading();
+          wx.showToast({
+            title: '欢迎注册！请设置密码（至少6位）',
+            icon: 'success'
+          });
+          return;
+        }
+        
+        if (!password) {
+          wx.hideLoading();
+          wx.showToast({
+            title: '请设置密码（至少6位）',
+            icon: 'none'
+          });
+          return;
+        }
+        
+        if (password.length < 6) {
+          wx.hideLoading();
+          wx.showToast({
+            title: '密码长度至少6位',
+            icon: 'none'
+          });
+          return;
+        }
+        
+        if (!confirmPassword) {
+          wx.hideLoading();
+          wx.showToast({
+            title: '请确认密码',
+            icon: 'none'
+          });
+          return;
+        }
+        
+        if (password !== confirmPassword) {
+          wx.hideLoading();
+          wx.showToast({
+            title: '两次输入的密码不一致',
+            icon: 'none'
+          });
+          this.setData({ confirmPassword: '' });
+          return;
+        }
+        
+        // 直接使用数据库执行注册
+        const result = await db.register(userName, password, confirmPassword);
+        wx.hideLoading();
+        
+        if (result.success) {
+          // 重置错误计数
+          const passwordErrorCount = { ...this.data.passwordErrorCount };
+          passwordErrorCount[userName] = 0;
+          this.setData({ passwordErrorCount });
+          
+          // 更新全局数据
+          app.globalData.currentUserName = userName;
+          
+          wx.showToast({
+            title: '注册成功',
+            icon: 'success'
+          });
+          
+          // 跳转到首页
+          setTimeout(() => {
+            wx.redirectTo({
+              url: '/pages/home/home'
+            });
+          }, 1500);
+        } else {
+          wx.showModal({
+            title: '注册失败',
+            content: result.error || '未知错误，请检查网络连接和云开发配置',
+            showCancel: false,
+            confirmText: '确定'
+          });
+        }
+      }
+    } catch (e) {
+      wx.hideLoading();
+      console.error('登录/注册异常:', e);
+      wx.showModal({
+        title: '操作失败',
+        content: `发生错误：${e.message || '未知错误'}\n\n请检查：\n1. 云开发环境ID是否正确\n2. 数据库权限是否已设置\n3. 网络连接是否正常`,
+        showCancel: false,
+        confirmText: '确定'
+      });
+    }
+  },
+});
+
+

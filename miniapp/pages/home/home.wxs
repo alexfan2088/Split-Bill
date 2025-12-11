@@ -1,0 +1,22 @@
+// pages/home/home.wxs
+// 将成员数组转换为字符串
+function joinMembers(memberNames) {
+  // WXS 中不能使用 Array.isArray，使用其他方式检查
+  if (!memberNames) {
+    return '暂无成员';
+  }
+  // 检查是否有 length 属性（数组的特征）
+  if (typeof memberNames.length === 'undefined' || memberNames.length === 0) {
+    return '暂无成员';
+  }
+  // 使用 join 方法（如果 memberNames 是数组，会有 join 方法）
+  if (typeof memberNames.join === 'function') {
+    return memberNames.join('、');
+  }
+  return '暂无成员';
+}
+
+module.exports = {
+  joinMembers: joinMembers
+};
+

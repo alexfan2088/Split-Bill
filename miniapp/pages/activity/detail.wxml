@@ -1,0 +1,76 @@
+<!--pages/activity/detail.wxml-->
+<view class="container">
+  <view class="header">
+    <view class="activity-title">{{activity.name}}</view>
+    <view class="activity-meta">{{activityMeta}}</view>
+    <button wx:if="{{isCreator}}" class="btn-edit-activity" size="mini" bindtap="editActivity">编辑活动</button>
+  </view>
+  
+  <view class="tabs">
+    <view class="tab {{currentTab === 'bills' ? 'active' : ''}}" bindtap="switchTab" data-tab="bills">账单</view>
+    <view class="tab {{currentTab === 'summary' ? 'active' : ''}}" bindtap="switchTab" data-tab="summary">结算</view>
+  </view>
+  
+  <!-- 账单 Tab -->
+  <view wx:if="{{currentTab === 'bills'}}" class="tab-content">
+    <view class="bill-list">
+      <view wx:if="{{bills.length === 0}}" class="empty-tip">
+        <text>暂无账单记录</text>
+      </view>
+      
+      <view wx:for="{{bills}}" wx:key="_id" class="bill-item" bindtap="viewBill" data-bill="{{item}}">
+        <view class="bill-left">
+          <view class="bill-circles">
+            <view wx:for="{{item.circles}}" wx:key="index" wx:for-item="circle" class="circle {{circle.type}}" style="margin-left: {{circle.marginLeft}}; background-color: {{circle.color}};">
+              <text wx:if="{{circle.surname}}">{{circle.surname}}</text>
+            </view>
+          </view>
+          <view class="bill-weight">{{item.totalCount}}</view>
+          <view class="bill-info">
+            <view class="bill-title">{{item.title}}</view>
+            <view class="bill-date">{{item.date}}</view>
+          </view>
+        </view>
+        <view class="bill-right">
+          <view class="bill-amount">¥{{item.amount}}</view>
+          <button wx:if="{{item.isCreator}}" class="btn-delete" size="mini" catchtap="deleteBill" data-id="{{item._id}}" data-title="{{item.title}}">删除</button>
+        </view>
+      </view>
+    </view>
+    <button class="btn-add" bindtap="addBill">+ 添加账单</button>
+  </view>
+  
+  <!-- 结算 Tab -->
+  <view wx:if="{{currentTab === 'summary'}}" class="tab-content">
+    <view class="summary-content">
+      <view class="summary-header">
+        <view class="summary-total">总支出：<text class="amount">¥{{total}}</text></view>
+        <view class="summary-meta">{{dateRange}} | 账单数量：{{bills.length}} 条</view>
+        <view class="summary-avg">按权重人均：¥{{avg}} / 权重1人</view>
+      </view>
+      
+      <view class="member-list">
+        <view wx:for="{{members}}" wx:key="name" class="member-item">
+          <view class="member-info">
+            <view class="member-name">{{item.name}}</view>
+            <view class="member-detail">
+              实付：¥{{item.bal.paid}} | 应付：¥{{item.bal.shouldPay}}
+            </view>
+          </view>
+          <view class="member-balance {{item.bal.balance < 0 ? 'negative' : 'positive'}}">
+            余额：¥{{item.bal.balance}}
+          </view>
+        </view>
+      </view>
+      
+      <view wx:if="{{suggestionMember}}" class="suggestion-card">
+        <view class="suggestion-title">建议下一次买单人员</view>
+        <view class="suggestion-content">
+          <text class="suggestion-name">{{suggestionMember.name}}</text> 应付：¥{{suggestionMember.shouldPay}}，实付：¥{{suggestionMember.paid}}
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+
+

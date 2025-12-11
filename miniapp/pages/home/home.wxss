@@ -1,0 +1,107 @@
+/* pages/home/home.wxss */
+.container {
+  padding: 0;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.header {
+  background-color: white;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+}
+
+.user-label {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.btn-logout {
+  background-color: #dc3545;
+  color: white;
+  font-size: 24rpx;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx;
+  background-color: white;
+  margin-bottom: 20rpx;
+}
+
+.page-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.btn-add {
+  background-color: #007bff;
+  color: white;
+  padding: 12rpx 24rpx;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+}
+
+.activity-list {
+  padding: 0 20rpx;
+}
+
+.empty-tip {
+  text-align: center;
+  padding: 100rpx 20rpx;
+  color: #999;
+  font-size: 28rpx;
+}
+
+.activity-item {
+  background-color: white;
+  border-radius: 8rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.1);
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.activity-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  flex: 1;
+}
+
+.activity-meta {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.activity-actions {
+  display: flex;
+  gap: 16rpx;
+  justify-content: flex-end;
+}
+
+.btn-edit {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-delete {
+  background-color: #dc3545;
+  color: white;
+}
+
+

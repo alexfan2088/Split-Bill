@@ -1,0 +1,97 @@
+/* pages/bill/edit.wxss */
+.container {
+  padding: 20rpx;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.form {
+  background-color: white;
+  border-radius: 8rpx;
+  padding: 30rpx;
+}
+
+.form-item {
+  margin-bottom: 40rpx;
+}
+
+.label {
+  display: block;
+  font-size: 28rpx;
+  color: #333;
+  margin-bottom: 16rpx;
+  font-weight: 500;
+}
+
+.hint {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 8rpx;
+}
+
+.input {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 20rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+}
+
+.picker {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 20rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 200rpx;
+  padding: 20rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+}
+
+.participants-list {
+  margin-top: 16rpx;
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.participant-name {
+  font-size: 28rpx;
+  color: #333;
+  width: 200rpx;
+}
+
+.weight-options {
+  display: flex;
+  gap: 20rpx;
+  align-items: center;
+}
+
+.weight-option {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.weight-option text {
+  font-size: 26rpx;
+  color: #666;
+}
+
+

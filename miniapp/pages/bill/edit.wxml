@@ -1,0 +1,57 @@
+<!--pages/bill/edit.wxml-->
+<view class="container">
+  <view class="form">
+    <view class="form-item">
+      <text class="label">金额（元）</text>
+      <input class="input" type="digit" placeholder="0.00" value="{{amount}}" bindinput="onAmountInput" disabled="{{isReadOnly}}" />
+    </view>
+    
+    <view class="form-item">
+      <text class="label">账单名称</text>
+      <input class="input" type="text" placeholder="例如：晚餐、山姆购物" value="{{title}}" bindinput="onTitleInput" maxlength="7" disabled="{{isReadOnly}}" />
+      <text class="hint">最多7个汉字</text>
+    </view>
+    
+    <view class="form-item">
+      <text class="label">时间</text>
+      <picker mode="date" value="{{date}}" bindchange="onDateChange" disabled="{{isReadOnly}}">
+        <view class="picker">{{date || '选择日期'}}</view>
+      </picker>
+      <picker mode="time" value="{{time}}" bindchange="onTimeChange" disabled="{{isReadOnly}}">
+        <view class="picker">{{time || '选择时间'}}</view>
+      </picker>
+    </view>
+    
+    <view class="form-item">
+      <text class="label">付款人</text>
+      <picker range="{{payerList}}" range-key="name" value="{{payerIndex}}" bindchange="onPayerChange" disabled="{{isReadOnly}}">
+        <view class="picker">{{payerList[payerIndex].name || '选择付款人'}}</view>
+      </picker>
+    </view>
+    
+    <view class="form-item">
+      <text class="label">参与成员（选择权重：0表示不参与，1-3表示人数）</text>
+      <view class="participants-list">
+        <view wx:for="{{participants}}" wx:key="name" class="participant-item">
+          <view class="participant-name">{{item.name}}</view>
+          <radio-group bindchange="onWeightChange" data-name="{{item.name}}" disabled="{{isReadOnly}}">
+            <view class="weight-options">
+              <view wx:for="{{[0,1,2,3]}}" wx:key="*this" wx:for-item="w" class="weight-option">
+                <radio value="{{w}}" checked="{{item.weight === w}}" disabled="{{isReadOnly}}" />
+                <text>{{w}}</text>
+              </view>
+            </view>
+          </radio-group>
+        </view>
+      </view>
+    </view>
+    
+    <view class="form-item">
+      <text class="label">备注</text>
+      <textarea class="textarea" placeholder="可选" value="{{remark}}" bindinput="onRemarkInput" disabled="{{isReadOnly}}" />
+    </view>
+    
+    <button wx:if="{{!isReadOnly}}" class="btn btn-full" bindtap="saveBill">{{isEdit ? '更新账单' : '保存账单'}}</button>
+  </view>
+</view>
+

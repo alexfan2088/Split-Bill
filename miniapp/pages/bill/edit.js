@@ -1,0 +1,475 @@
+// pages/bill/edit.js
+const db = require('../../utils/db.js');
+const app = getApp();
+
+Page({
+  data: {
+    activityId: '',
+    billId: '',
+    isEdit: false,
+    isReadOnly: false,
+    amount: '',
+    title: '',
+    date: '',
+    time: '',
+    payerIndex: 0,
+    payerList: [],
+    participants: [],
+    remark: '',
+  },
+  
+  onLoad(options) {
+    this.setData({ activityId: options.activityId || '' });
+    
+    // 检查是否是只读模式
+    const isReadOnly = options.readOnly === 'true';
+    this.setData({ isReadOnly });
+    
+    if (options.billId) {
+      // 编辑/查看模式
+      this.setData({ 
+        billId: options.billId,
+        isEdit: true 
+      });
+      this.loadBillData();
+    } else {
+      // 新建模式
+      this.initNewBill();
+    }
+    
+    this.loadActivityMembers();
+    
+    // 如果是只读模式，修改标题
+    if (isReadOnly) {
+      wx.setNavigationBarTitle({
+        title: '账单详情'
+      });
+    }
+  },
+  
+  async loadActivityMembers() {
+    try {
+      const dbCloud = wx.cloud.database();
+      const activityId = this.data.activityId;
+      
+      // 加载活动的group（获取最新成员列表）
+      const groupRes = await dbCloud.collection('groups')
+        .where({ activityId: activityId })
+        .limit(1)
+        .get();
+      
+      let members = [];
+      if (groupRes.data && groupRes.data.length > 0) {
+        members = groupRes.data[0].members || [];
+      } else {
+        // 如果没有group，从activity中获取
+        const actRes = await dbCloud.collection('activities').doc(activityId).get();
+        members = actRes.data.members || [];
+      }
+      
+      const payerList = members.map(m => ({
+        name: typeof m === 'string' ? m : m.name
+      }));
+      
+      this.setData({ payerList });
+      
+      // 如果是新建，设置默认付款人
+      if (!this.data.isEdit && payerList.length > 0) {
+        const userName = db.getCurrentUser();
+        const defaultPayerIndex = payerList.findIndex(p => p.name === userName);
+        if (defaultPayerIndex >= 0) {
+          this.setData({ payerIndex: defaultPayerIndex });
+        }
+      }
+    } catch (e) {
+      console.error('加载活动成员失败:', e);
+      wx.showToast({
+        title: '加载成员失败',
+        icon: 'none'
+      });
+    }
+  },
+  
+  async initNewBill() {
+    // 设置默认时间
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    
+    this.setData({
+      date: `${year}-${month}-${day}`,
+      time: `${hours}:${minutes}`,
+    });
+    
+    // 加载活动成员并继承最近一次账单的权重
+    await this.loadParticipantsWithInheritance();
+  },
+  
+  async loadParticipantsWithInheritance() {
+    try {
+      const dbCloud = wx.cloud.database();
+      const activityId = this.data.activityId;
+      
+      // 查询最近一次账单
+      let lastBillParticipants = null;
+      try {
+        const lastBillRes = await dbCloud.collection('bills')
+          .where({ activityId: activityId })
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+        
+        if (lastBillRes.data && lastBillRes.data.length > 0) {
+          lastBillParticipants = lastBillRes.data[0].participants || null;
+        }
+      } catch (e) {
+        console.log('查询最近一次账单失败（可能没有索引）:', e);
+      }
+      
+      // 加载成员列表
+      const groupRes = await dbCloud.collection('groups')
+        .where({ activityId: activityId })
+        .limit(1)
+        .get();
+      
+      let members = [];
+      if (groupRes.data && groupRes.data.length > 0) {
+        members = groupRes.data[0].members || [];
+      }
+      
+      // 生成参与成员列表，继承权重
+      const participants = members.map(m => {
+        const name = typeof m === 'string' ? m : m.name;
+        let weight = 2; // 默认权重为2
+        
+        if (lastBillParticipants && lastBillParticipants.hasOwnProperty(name)) {
+          weight = Number(lastBillParticipants[name]) || 0;
+        }
+        
+        return { name, weight };
+      });
+      
+      this.setData({ participants });
+    } catch (e) {
+      console.error('加载参与成员失败:', e);
+    }
+  },
+  
+  async loadBillData() {
+    wx.showLoading({ title: '加载中...' });
+    
+    try {
+      const dbCloud = wx.cloud.database();
+      const billRes = await dbCloud.collection('bills').doc(this.data.billId).get();
+      const bill = billRes.data;
+      
+      // 检查权限
+      const userName = db.getCurrentUser();
+      const isCreator = bill.creator === userName;
+      
+      // 如果不是创建者，设置为只读模式
+      if (!isCreator && !this.data.isReadOnly) {
+        this.setData({ isReadOnly: true });
+        wx.setNavigationBarTitle({
+          title: '账单详情'
+        });
+      }
+      
+      // 格式化时间
+      const billTime = bill.time ? (bill.time.getTime ? bill.time : new Date(bill.time)) : new Date();
+      const year = billTime.getFullYear();
+      const month = String(billTime.getMonth() + 1).padStart(2, '0');
+      const day = String(billTime.getDate()).padStart(2, '0');
+      const hours = String(billTime.getHours()).padStart(2, '0');
+      const minutes = String(billTime.getMinutes()).padStart(2, '0');
+      
+      // 加载参与成员
+      const groupRes = await dbCloud.collection('groups')
+        .where({ activityId: this.data.activityId })
+        .limit(1)
+        .get();
+      
+      let members = [];
+      if (groupRes.data && groupRes.data.length > 0) {
+        members = groupRes.data[0].members || [];
+      }
+      
+      // 生成参与成员列表，使用账单中的权重
+      const participants = members.map(m => {
+        const name = typeof m === 'string' ? m : m.name;
+        const weight = bill.participants && bill.participants[name] !== undefined 
+          ? Number(bill.participants[name]) || 0 
+          : 0;
+        return { name, weight };
+      });
+      
+      // 设置付款人索引
+      const payerIndex = this.data.payerList.findIndex(p => p.name === bill.payer);
+      
+      this.setData({
+        amount: String(bill.amount || ''),
+        title: bill.title || '',
+        date: `${year}-${month}-${day}`,
+        time: `${hours}:${minutes}`,
+        payerIndex: payerIndex >= 0 ? payerIndex : 0,
+        participants: participants,
+        remark: bill.remark || '',
+      });
+      
+    } catch (e) {
+      console.error('加载账单数据失败:', e);
+      wx.showToast({
+        title: '加载失败',
+        icon: 'none'
+      });
+    }
+    
+    wx.hideLoading();
+  },
+  
+  onAmountInput(e) {
+    this.setData({ amount: e.detail.value });
+  },
+  
+  onTitleInput(e) {
+    const title = e.detail.value;
+    if (title.length > 7) {
+      wx.showModal({
+        title: '提示',
+        content: '账单名称不能超过7个汉字，请修改后重试。',
+        showCancel: false,
+        confirmText: '确定',
+        success: () => {
+          // 焦点会自动回到输入框
+        }
+      });
+      return;
+    }
+    this.setData({ title });
+  },
+  
+  onDateChange(e) {
+    this.setData({ date: e.detail.value });
+  },
+  
+  onTimeChange(e) {
+    this.setData({ time: e.detail.value });
+  },
+  
+  onPayerChange(e) {
+    this.setData({ payerIndex: e.detail.value });
+  },
+  
+  onWeightChange(e) {
+    const name = e.currentTarget.dataset.name;
+    const weight = Number(e.detail.value);
+    
+    const participants = this.data.participants.map(p => {
+      if (p.name === name) {
+        return { ...p, weight: weight };
+      }
+      return p;
+    });
+    
+    this.setData({ participants });
+  },
+  
+  onRemarkInput(e) {
+    this.setData({ remark: e.detail.value });
+  },
+  
+  async saveBill() {
+    // 验证账单名称长度
+    if (this.data.title.length > 7) {
+      wx.showModal({
+        title: '提示',
+        content: '账单名称不能超过7个汉字，请修改后重试。',
+        showCancel: false,
+        confirmText: '确定',
+      });
+      return;
+    }
+    
+    const amount = Number(this.data.amount);
+    if (!amount || amount <= 0) {
+      wx.showToast({
+        title: '金额必须大于0',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    const title = this.data.title.trim() || '未命名';
+    const payer = this.data.payerList[this.data.payerIndex].name;
+    const remark = this.data.remark.trim();
+    
+    // 收集参与成员权重（与Web版本保持一致）
+    // 确保所有成员都保存（包括权重为0的），以便编辑时能正确显示
+    // 只保存当前活动成员，清除已不存在的旧成员
+    const participants = {};
+    this.data.participants.forEach(p => {
+      // 确保权重值是数字类型，避免类型不一致的问题
+      const weight = typeof p.weight === 'number' ? p.weight : Number(p.weight || 0);
+      participants[p.name] = weight;
+    });
+    
+    // 确保只保存当前活动成员，清除数据库中已不存在的旧成员
+    // 获取当前活动成员列表
+    const currentMemberNames = this.data.participants.map(p => p.name);
+    console.log('当前活动成员:', currentMemberNames);
+    console.log('准备保存的participants:', participants);
+    
+    // 检查是否有权重大于0的成员
+    const namesWithWeight = Object.keys(participants).filter(name => participants[name] > 0);
+    if (namesWithWeight.length === 0) {
+      wx.showToast({
+        title: '至少添加一个参与成员（权重大于0）',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    // 计算分摊金额（与Web版本保持一致）
+    // 为所有成员设置 splitDetail，权重为0的成员金额为0
+    const totalWeight = namesWithWeight.reduce((sum, name) => sum + participants[name], 0);
+    const splitDetail = {};
+    Object.keys(participants).forEach(name => {
+      if (participants[name] > 0 && totalWeight > 0) {
+        // 权重大于0的成员：按权重比例计算
+        const share = amount * participants[name] / totalWeight;
+        splitDetail[name] = Number(share.toFixed(2));
+      } else {
+        // 权重为0的成员：金额为0
+        splitDetail[name] = 0;
+      }
+    });
+    
+    // 组合时间（使用iOS兼容格式）
+    const dateStr = this.data.date; // 格式：yyyy-MM-dd
+    const timeStr = this.data.time; // 格式：HH:mm
+    // 转换为 iOS 兼容格式：yyyy-MM-ddTHH:mm:ss
+    const time = new Date(`${dateStr}T${timeStr}:00`);
+    
+    wx.showLoading({
+      title: this.data.isEdit ? '更新中...' : '保存中...'
+    });
+    
+    try {
+      const dbCloud = wx.cloud.database();
+      const userName = db.getCurrentUser();
+      
+      // 确保只包含当前活动成员，不包含任何旧成员
+      // 获取当前活动成员名称列表
+      const currentMemberNames = this.data.participants.map(p => p.name);
+      
+      // 清理participants，只保留当前活动成员
+      const cleanParticipants = {};
+      currentMemberNames.forEach(name => {
+        if (participants.hasOwnProperty(name)) {
+          cleanParticipants[name] = participants[name];
+        }
+      });
+      
+      // 清理splitDetail，只保留当前活动成员
+      const cleanSplitDetail = {};
+      currentMemberNames.forEach(name => {
+        if (splitDetail.hasOwnProperty(name)) {
+          cleanSplitDetail[name] = splitDetail[name];
+        }
+      });
+      
+      console.log('清理后的participants:', cleanParticipants);
+      console.log('清理后的splitDetail:', cleanSplitDetail);
+      console.log('当前活动成员:', currentMemberNames);
+      
+      const billData = {
+        activityId: this.data.activityId,
+        amount,
+        title,
+        payer,
+        participants: cleanParticipants, // 使用清理后的participants
+        splitDetail: cleanSplitDetail, // 使用清理后的splitDetail
+        time: time,
+        remark,
+      };
+      
+      if (this.data.isEdit) {
+        // 更新账单
+        // 先获取当前账单数据，检查是否有旧成员需要清除
+        const currentBill = await dbCloud.collection('bills').doc(this.data.billId).get();
+        const oldParticipants = currentBill.data.participants || {};
+        const currentMemberNames = this.data.participants.map(p => p.name);
+        
+        // 检查是否有旧成员需要清除
+        const oldMemberNames = Object.keys(oldParticipants).filter(name => !currentMemberNames.includes(name));
+        if (oldMemberNames.length > 0) {
+          console.log('发现需要清除的旧成员:', oldMemberNames);
+          console.log('旧participants:', oldParticipants);
+        }
+        
+        console.log('更新账单，billData.participants:', billData.participants);
+        console.log('更新账单，billData.splitDetail:', billData.splitDetail);
+        
+        // 更新时，使用billData（已经清理过），确保清除旧成员
+        await dbCloud.collection('bills').doc(this.data.billId).update({
+          data: {
+            ...billData,
+            updatedAt: new Date(),
+          }
+        });
+        
+        // 验证更新后的数据
+        const updatedBill = await dbCloud.collection('bills').doc(this.data.billId).get();
+        const updatedParticipants = updatedBill.data.participants || {};
+        console.log('更新后的账单数据:', updatedBill.data);
+        console.log('更新后的participants:', updatedParticipants);
+        console.log('更新后的participants keys:', Object.keys(updatedParticipants));
+        
+        // 验证是否还有旧成员
+        const remainingOldMembers = Object.keys(updatedParticipants).filter(name => !currentMemberNames.includes(name));
+        if (remainingOldMembers.length > 0) {
+          console.error('错误：更新后仍有旧成员:', remainingOldMembers);
+        } else {
+          console.log('✓ 更新成功，已清除所有旧成员');
+        }
+        
+        wx.hideLoading();
+        wx.showToast({
+          title: '更新成功',
+          icon: 'success'
+        });
+      } else {
+        // 创建账单
+        await dbCloud.collection('bills').add({
+          data: {
+            ...billData,
+            creator: userName,
+            createdAt: new Date(),
+          }
+        });
+        
+        wx.hideLoading();
+        wx.showToast({
+          title: '保存成功',
+          icon: 'success'
+        });
+      }
+      
+      // 返回上一页
+      setTimeout(() => {
+        wx.navigateBack();
+      }, 1500);
+    } catch (e) {
+      wx.hideLoading();
+      console.error('保存账单失败:', e);
+      wx.showToast({
+        title: '保存失败',
+        icon: 'none'
+      });
+    }
+  },
+});
+

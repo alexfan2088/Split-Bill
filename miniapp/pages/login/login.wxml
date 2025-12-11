@@ -1,0 +1,35 @@
+<!--pages/login/login.wxml-->
+<view class="container">
+  <view class="login-card">
+    <view class="title">AA 分账</view>
+    <view class="subtitle">题名登塔喜，醵宴为花忙</view>
+    
+    <view class="form">
+      <view class="form-item">
+        <text class="label">用户名：</text>
+        <input class="input" type="text" placeholder="输入你的名字，如：唐朝奎" value="{{userName}}" bindinput="onUserNameInput" />
+      </view>
+      
+      <view wx:if="{{showPassword}}" class="form-item">
+        <text class="label">密码：</text>
+        <view class="password-wrapper">
+          <input class="input" type="text" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" />
+          <text class="toggle-password" bindtap="togglePassword">{{showPasswordText ? '隐藏' : '显示'}}</text>
+        </view>
+      </view>
+      
+      <view wx:if="{{showConfirmPassword}}" class="form-item">
+        <text class="label">确认密码：</text>
+        <input class="input" type="password" placeholder="请再次输入密码" value="{{confirmPassword}}" bindinput="onConfirmPasswordInput" />
+      </view>
+      
+      <view class="form-item">
+        <text class="status-text {{statusTextColor}}">{{statusText}}</text>
+      </view>
+      
+      <button class="btn btn-full" bindtap="handleLoginOrRegister">登录/注册</button>
+    </view>
+  </view>
+</view>
+
+

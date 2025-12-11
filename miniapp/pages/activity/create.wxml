@@ -1,0 +1,28 @@
+<!--pages/activity/create.wxml-->
+<view class="container">
+  <view class="form">
+    <view class="form-item">
+      <text class="label">活动名称</text>
+      <input class="input" type="text" placeholder="例如：周末聚餐" value="{{name}}" bindinput="onNameInput" maxlength="20" />
+    </view>
+    
+    <view class="form-item">
+      <text class="label">活动类型</text>
+      <input class="input" type="text" placeholder="例如：聚餐、旅游" value="{{type}}" bindinput="onTypeInput" maxlength="10" />
+    </view>
+    
+    <view class="form-item">
+      <text class="label">参与成员（输入姓名，每行一个）</text>
+      <textarea class="textarea" placeholder="每行输入一个成员姓名" value="{{membersText}}" bindinput="onMembersInput" />
+    </view>
+    
+    <view class="form-item">
+      <text class="label">备注</text>
+      <textarea class="textarea" placeholder="可选" value="{{remark}}" bindinput="onRemarkInput" />
+    </view>
+    
+    <button class="btn btn-full" bindtap="saveActivity">{{isEdit ? '更新' : '创建'}}</button>
+  </view>
+</view>
+
+

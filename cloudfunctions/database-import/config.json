@@ -1,0 +1,6 @@
+{
+  "timeout": 300,
+  "memorySize": 512,
+  "environmentVariables": {}
+}
+
