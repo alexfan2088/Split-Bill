@@ -15,6 +15,11 @@ Page({
     dateRange: '',
     suggestionMember: null,
     isCreator: false, // 是否是活动创建者
+    isPrepaid: false, // 是否打平伙
+    recharges: [], // 充值列表
+    totalRecharge: 0, // 充值总金额
+    totalConsume: 0, // 消费总金额
+    remaining: 0, // 剩余金额
   },
   
   onLoad(options) {
@@ -41,6 +46,9 @@ Page({
       // 加载活动信息
       const actRes = await dbCloud.collection('activities').doc(activityId).get();
       const activity = actRes.data;
+      
+      // 调试：打印isPrepaid值
+      console.log('活动 isPrepaid 值:', activity.isPrepaid, typeof activity.isPrepaid);
       
       // 加载活动的group（获取最新成员列表）
       const groupRes = await dbCloud.collection('groups')
@@ -101,7 +109,33 @@ Page({
       });
       
       // 计算余额
-      const balances = this.calcBalances(activity.members || [], bills);
+      // 如果是打平伙活动，需要传入充值数据
+      let balances = {};
+      if (activity.isPrepaid) {
+        // 先加载充值数据
+        try {
+          const dbCloud = wx.cloud.database();
+          let rechargesRes;
+          try {
+            rechargesRes = await dbCloud.collection('recharges')
+              .where({ activityId: activityId })
+              .orderBy('date', 'desc')
+              .get();
+          } catch (e) {
+            rechargesRes = await dbCloud.collection('recharges')
+              .where({ activityId: activityId })
+              .orderBy('createdAt', 'desc')
+              .get();
+          }
+          const recharges = rechargesRes.data || [];
+          balances = this.calcBalances(activity.members || [], bills, recharges);
+        } catch (e) {
+          console.error('加载充值数据失败:', e);
+          balances = this.calcBalances(activity.members || [], bills, []);
+        }
+      } else {
+        balances = this.calcBalances(activity.members || [], bills, []);
+      }
       
       // 计算总支出和人均
       const total = bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
@@ -150,6 +184,54 @@ Page({
       // 建议下一次买单人员（余额最小的成员）
       const suggestionMember = this.getSuggestionMember(balances);
       
+      // 如果是打平伙活动，加载充值数据
+      let recharges = [];
+      let totalRecharge = 0;
+      let totalConsume = total;
+      let remaining = 0;
+      
+      if (activity.isPrepaid) {
+        try {
+          const dbCloud = wx.cloud.database();
+          let rechargesRes;
+          try {
+            // 尝试使用date字段排序
+            rechargesRes = await dbCloud.collection('recharges')
+              .where({ activityId: activityId })
+              .orderBy('date', 'desc')
+              .get();
+          } catch (e) {
+            // 如果date字段没有索引，使用createdAt排序
+            console.log('使用createdAt排序:', e);
+            rechargesRes = await dbCloud.collection('recharges')
+              .where({ activityId: activityId })
+              .orderBy('createdAt', 'desc')
+              .get();
+          }
+          
+          recharges = rechargesRes.data || [];
+          
+          // 如果没有排序，手动按日期倒序排序
+          if (recharges.length > 0) {
+            recharges.sort((a, b) => {
+              const dateA = a.date ? (a.date.getTime ? a.date.getTime() : new Date(a.date).getTime()) : 
+                           (a.createdAt ? (a.createdAt.getTime ? a.createdAt.getTime() : new Date(a.createdAt).getTime()) : 0);
+              const dateB = b.date ? (b.date.getTime ? b.date.getTime() : new Date(b.date).getTime()) : 
+                           (b.createdAt ? (b.createdAt.getTime ? b.createdAt.getTime() : new Date(b.createdAt).getTime()) : 0);
+              return dateB - dateA; // 倒序
+            });
+          }
+          
+          // 计算充值总金额
+          totalRecharge = recharges.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+          
+          // 计算剩余金额
+          remaining = totalRecharge - totalConsume;
+        } catch (e) {
+          console.error('加载充值数据失败:', e);
+        }
+      }
+      
       this.setData({
         activity,
         activityMeta,
@@ -160,6 +242,16 @@ Page({
         dateRange,
         suggestionMember,
         isCreator: isActivityCreator, // 保存是否是活动创建者
+        isPrepaid: activity.isPrepaid || false,
+        recharges: recharges.map(r => ({
+          ...r,
+          date: this.formatRechargeDate(r),
+          amount: Number(r.amount || 0).toFixed(2),
+          isCreator: r.creator === db.getCurrentUser(),
+        })),
+        totalRecharge: totalRecharge.toFixed(2),
+        totalConsume: totalConsume.toFixed(2),
+        remaining: remaining.toFixed(2),
       });
       
       // 保存到全局数据
@@ -302,7 +394,7 @@ Page({
   
   // 格式化账单日期
   formatBillDate(bill) {
-    const date = bill.time ? (bill.time.getTime ? bill.time : new Date(bill.time)) : 
+    const date = bill.time ? (bill.time.getTime ? bill.time : new Date(bill.time)) :
                  (bill.createdAt ? (bill.createdAt.getTime ? bill.createdAt : new Date(bill.createdAt)) : new Date());
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -310,22 +402,48 @@ Page({
     return `${year}.${month}.${day}`;
   },
   
+  // 格式化充值日期
+  formatRechargeDate(recharge) {
+    const date = recharge.date ? (recharge.date.getTime ? recharge.date : new Date(recharge.date)) :
+                 (recharge.createdAt ? (recharge.createdAt.getTime ? recharge.createdAt : new Date(recharge.createdAt)) : new Date());
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}.${month}.${day}`;
+  },
+  
   // 计算余额
-  calcBalances(members, bills) {
+  calcBalances(members, bills, recharges = []) {
     const map = {};
     members.forEach(m => {
       map[m.name] = { paid: 0, shouldPay: 0, balance: 0 };
     });
     
-    // 统计实付与应付
+    // 如果是打平伙活动，实付为充值金额
+    if (recharges.length > 0) {
+      recharges.forEach(r => {
+        const amount = Number(r.amount || 0);
+        const payer = r.payer;
+        if (payer && map[payer]) {
+          map[payer].paid += amount;
+        }
+      });
+    } else {
+      // 非打平伙活动，实付为账单付款金额
+      bills.forEach(b => {
+        const amount = Number(b.amount || 0);
+        if (b.payer && map[b.payer]) {
+          map[b.payer].paid += amount;
+        }
+      });
+    }
+    
+    // 统计应付（所有活动都按账单分摊计算）
     bills.forEach(b => {
-      const amount = Number(b.amount || 0);
-      if (b.payer && map[b.payer]) {
-        map[b.payer].paid += amount;
-      }
       if (b.splitDetail) {
         Object.keys(b.splitDetail).forEach(name => {
           if (!map[name]) return;
+          // 只有权重大于0的成员才计算应付
           if (b.participants && b.participants[name] > 0) {
             map[name].shouldPay += Number(b.splitDetail[name] || 0);
           }
@@ -464,6 +582,46 @@ Page({
     
     wx.navigateTo({
       url: `/pages/activity/create?id=${this.data.activityId}&data=${encodeURIComponent(JSON.stringify(activityData))}`
+    });
+  },
+  
+  // 添加充值
+  addRecharge() {
+    wx.navigateTo({
+      url: `/pages/recharge/add?activityId=${this.data.activityId}`
+    });
+  },
+  
+  // 删除充值
+  deleteRecharge(e) {
+    const rechargeId = e.currentTarget.dataset.id;
+    const payer = e.currentTarget.dataset.payer;
+    const amount = e.currentTarget.dataset.amount;
+    
+    wx.showModal({
+      title: '确认删除',
+      content: `确定要删除充值记录（${payer}，¥${amount}）吗？此操作不可恢复！`,
+      success: async (res) => {
+        if (res.confirm) {
+          wx.showLoading({ title: '删除中...' });
+          try {
+            const dbCloud = wx.cloud.database();
+            await dbCloud.collection('recharges').doc(rechargeId).remove();
+            wx.hideLoading();
+            wx.showToast({
+              title: '删除成功',
+              icon: 'success'
+            });
+            this.loadActivityData();
+          } catch (e) {
+            wx.hideLoading();
+            wx.showToast({
+              title: '删除失败',
+              icon: 'none'
+            });
+          }
+        }
+      }
     });
   },
 });

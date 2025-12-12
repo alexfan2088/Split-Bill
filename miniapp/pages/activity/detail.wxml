@@ -3,7 +3,10 @@
   <view class="header">
     <view class="activity-header">
       <view class="activity-title-row">
-        <view class="activity-title">{{activity.name}}</view>
+        <view class="activity-title">
+          {{activity.name}}
+          <text wx:if="{{isPrepaid}}" class="prepaid-tag">（打平伙）</text>
+        </view>
         <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
       </view>
       <view class="activity-creator" wx:if="{{activity.creator}}">创建者：<text class="creator-name">{{activity.creator}}</text></view>
@@ -26,6 +29,7 @@
   
   <view class="tabs">
     <view class="tab {{currentTab === 'bills' ? 'active' : ''}}" bindtap="switchTab" data-tab="bills">账单</view>
+    <view wx:if="{{isPrepaid}}" class="tab {{currentTab === 'recharge' ? 'active' : ''}}" bindtap="switchTab" data-tab="recharge">打平伙</view>
     <view class="tab {{currentTab === 'summary' ? 'active' : ''}}" bindtap="switchTab" data-tab="summary">结算</view>
   </view>
   
@@ -58,9 +62,57 @@
     <button class="btn-add" bindtap="addBill">+ 添加账单</button>
   </view>
   
+  <!-- 打平伙 Tab -->
+  <view wx:if="{{currentTab === 'recharge' && isPrepaid}}" class="tab-content">
+    <view class="recharge-content">
+      <view class="recharge-summary">
+        <view class="recharge-summary-item">
+          <text class="recharge-label">充值总金额：</text>
+          <text class="recharge-value amount">¥{{totalRecharge}}</text>
+        </view>
+      </view>
+      
+      <view class="recharge-list">
+        <view wx:if="{{recharges.length === 0}}" class="empty-tip">
+          <text>暂无充值记录</text>
+        </view>
+        
+        <view wx:for="{{recharges}}" wx:key="_id" class="recharge-item">
+          <view class="recharge-info">
+            <view class="recharge-date">{{item.date}}</view>
+            <view class="recharge-payer">{{item.payer}}</view>
+          </view>
+          <view class="recharge-amount">¥{{item.amount}}</view>
+          <button wx:if="{{item.isCreator}}" class="btn-delete" size="mini" catchtap="deleteRecharge" data-id="{{item._id}}" data-payer="{{item.payer}}" data-amount="{{item.amount}}">删除</button>
+        </view>
+      </view>
+      
+      <button class="btn-add" bindtap="addRecharge">+ 添加充值</button>
+    </view>
+  </view>
+  
   <!-- 结算 Tab -->
   <view wx:if="{{currentTab === 'summary'}}" class="tab-content">
     <view class="summary-content">
+      <!-- 打平伙活动的特殊显示 -->
+      <view wx:if="{{isPrepaid}}" class="prepaid-summary">
+        <view class="prepaid-item">
+          <text class="prepaid-label">总金额（充值）：</text>
+          <text class="prepaid-value amount">¥{{totalRecharge}}</text>
+        </view>
+        <view class="prepaid-item">
+          <text class="prepaid-label">消费金额：</text>
+          <text class="prepaid-value">¥{{totalConsume}}</text>
+        </view>
+        <view class="prepaid-item">
+          <text class="prepaid-label">剩余金额：</text>
+          <text class="prepaid-value {{remaining < 0 ? 'negative' : 'positive'}}">¥{{remaining}}</text>
+        </view>
+        <view wx:if="{{remaining < 0}}" class="recharge-alert">
+          <text class="alert-text">⚠️ 余额不足，请及时充值！</text>
+        </view>
+      </view>
+      
       <view class="member-list">
         <view wx:for="{{members}}" wx:key="name" class="member-item">
           <view class="member-info">
@@ -75,7 +127,7 @@
         </view>
       </view>
       
-      <view wx:if="{{suggestionMember}}" class="suggestion-card">
+      <view wx:if="{{suggestionMember && !isPrepaid}}" class="suggestion-card">
         <view class="suggestion-title">建议下一次买单人员</view>
         <view class="suggestion-content">
           <text class="suggestion-name">{{suggestionMember.name}}</text> 应付：¥{{suggestionMember.shouldPay}}，实付：¥{{suggestionMember.paid}}

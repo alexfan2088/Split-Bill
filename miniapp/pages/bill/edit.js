@@ -16,6 +16,9 @@ Page({
     payerList: [],
     participants: [],
     remark: '',
+    isPrepaid: false, // 是否打平伙活动
+    keeper: '', // 保管人员
+    payerDisabled: false, // 付款人是否禁用
   },
   
   onLoad(options) {
@@ -59,28 +62,57 @@ Page({
         .get();
       
       let members = [];
+      let activity = null;
       if (groupRes.data && groupRes.data.length > 0) {
         members = groupRes.data[0].members || [];
       } else {
         // 如果没有group，从activity中获取
         const actRes = await dbCloud.collection('activities').doc(activityId).get();
-        members = actRes.data.members || [];
+        activity = actRes.data;
+        members = activity.members || [];
+      }
+      
+      // 如果没有获取到activity，重新获取
+      if (!activity) {
+        const actRes = await dbCloud.collection('activities').doc(activityId).get();
+        activity = actRes.data;
       }
       
       const payerList = members.map(m => ({
         name: typeof m === 'string' ? m : m.name
       }));
       
-      this.setData({ payerList });
+      // 检查是否是打平伙活动
+      const isPrepaid = activity ? (activity.isPrepaid || false) : false;
+      const keeper = activity ? (activity.keeper || '') : '';
       
-      // 如果是新建，设置默认付款人
-      if (!this.data.isEdit && payerList.length > 0) {
-        const userName = db.getCurrentUser();
-        const defaultPayerIndex = payerList.findIndex(p => p.name === userName);
-        if (defaultPayerIndex >= 0) {
-          this.setData({ payerIndex: defaultPayerIndex });
+      // 如果是打平伙活动，付款人默认为保管人员，且不可更改
+      let payerIndex = 0;
+      let payerDisabled = false;
+      if (isPrepaid && keeper) {
+        const keeperIndex = payerList.findIndex(p => p.name === keeper);
+        if (keeperIndex >= 0) {
+          payerIndex = keeperIndex;
+          payerDisabled = true;
+        }
+      } else {
+        // 如果不是打平伙活动，设置默认付款人为当前用户
+        if (!this.data.isEdit && payerList.length > 0) {
+          const userName = db.getCurrentUser();
+          const defaultPayerIndex = payerList.findIndex(p => p.name === userName);
+          if (defaultPayerIndex >= 0) {
+            payerIndex = defaultPayerIndex;
+          }
         }
       }
+      
+      this.setData({ 
+        payerList,
+        payerIndex,
+        isPrepaid,
+        keeper,
+        payerDisabled
+      });
     } catch (e) {
       console.error('加载活动成员失败:', e);
       wx.showToast({
@@ -206,17 +238,42 @@ Page({
         return { name, weight };
       });
       
+      // 加载活动信息，检查是否是打平伙活动
+      const actRes = await dbCloud.collection('activities').doc(this.data.activityId).get();
+      const activity = actRes.data;
+      const isPrepaid = activity ? (activity.isPrepaid || false) : false;
+      const keeper = activity ? (activity.keeper || '') : '';
+      
       // 设置付款人索引
-      const payerIndex = this.data.payerList.findIndex(p => p.name === bill.payer);
+      let payerIndex = 0;
+      let payerDisabled = false;
+      
+      // 如果是打平伙活动，付款人固定为保管人员
+      if (isPrepaid && keeper) {
+        const keeperIndex = this.data.payerList.findIndex(p => p.name === keeper);
+        if (keeperIndex >= 0) {
+          payerIndex = keeperIndex;
+          payerDisabled = true;
+        }
+      } else {
+        // 如果不是打平伙活动，使用账单中的付款人
+        payerIndex = this.data.payerList.findIndex(p => p.name === bill.payer);
+        if (payerIndex < 0) {
+          payerIndex = 0;
+        }
+      }
       
       this.setData({
         amount: String(bill.amount || ''),
         title: bill.title || '',
         date: `${year}-${month}-${day}`,
         time: `${hours}:${minutes}`,
-        payerIndex: payerIndex >= 0 ? payerIndex : 0,
+        payerIndex: payerIndex,
         participants: participants,
         remark: bill.remark || '',
+        isPrepaid: isPrepaid,
+        keeper: keeper,
+        payerDisabled: payerDisabled,
       });
       
     } catch (e) {
@@ -260,6 +317,10 @@ Page({
   },
   
   onPayerChange(e) {
+    // 如果是打平伙活动，不允许更改付款人
+    if (this.data.payerDisabled) {
+      return;
+    }
     this.setData({ payerIndex: e.detail.value });
   },
   

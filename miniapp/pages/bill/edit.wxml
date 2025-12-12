@@ -24,9 +24,10 @@
     
     <view class="form-item">
       <text class="label">付款人</text>
-      <picker range="{{payerList}}" range-key="name" value="{{payerIndex}}" bindchange="onPayerChange" disabled="{{isReadOnly}}">
-        <view class="picker">{{payerList[payerIndex].name || '选择付款人'}}</view>
+      <picker range="{{payerList}}" range-key="name" value="{{payerIndex}}" bindchange="onPayerChange" disabled="{{isReadOnly || payerDisabled}}">
+        <view class="picker {{payerDisabled ? 'picker-disabled' : ''}}">{{payerList[payerIndex] ? payerList[payerIndex].name : '选择付款人'}}</view>
       </picker>
+      <view wx:if="{{isPrepaid && keeper}}" class="hint">打平伙活动，付款人固定为保管人员（{{keeper}}）</view>
     </view>
     
     <view class="form-item">

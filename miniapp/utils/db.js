@@ -359,6 +359,57 @@ async function deleteActivity(activityId) {
   }
 }
 
+// 获取充值列表
+async function getRecharges(activityId) {
+  try {
+    const res = await db.collection('recharges')
+      .where({ activityId })
+      .orderBy('date', 'desc')
+      .get();
+    return res.data || [];
+  } catch (e) {
+    console.error('获取充值列表失败:', e);
+    return [];
+  }
+}
+
+// 保存充值
+async function saveRecharge(rechargeData) {
+  try {
+    const userName = getCurrentUser();
+    const result = await db.collection('recharges').add({
+      data: {
+        ...rechargeData,
+        creator: userName,
+        createdAt: new Date()
+      }
+    });
+    return { success: true, id: result._id };
+  } catch (e) {
+    console.error('保存充值失败:', e);
+    wx.showToast({
+      title: '保存失败',
+      icon: 'none'
+    });
+    return { success: false, error: e.message };
+  }
+}
+
+// 删除充值
+async function deleteRecharge(rechargeId) {
+  try {
+    await db.collection('recharges').doc(rechargeId).remove();
+    return { success: true };
+  } catch (e) {
+    console.error('删除充值失败:', e);
+    wx.showToast({
+      title: '删除失败',
+      icon: 'none'
+    });
+    return { success: false, error: e.message };
+  }
+}
+
 module.exports = {
   getCurrentUser,
   hashPassword,
@@ -370,4 +421,7 @@ module.exports = {
   updateBill,
   deleteBill,
   deleteActivity,
+  getRecharges,
+  saveRecharge,
+  deleteRecharge,
 };

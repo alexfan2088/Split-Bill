@@ -27,6 +27,23 @@
       <textarea class="textarea" placeholder="可选（最多20个汉字）" value="{{remark}}" bindinput="onRemarkInput" auto-height="{{false}}" maxlength="20" />
     </view>
     
+    <view wx:if="{{showPrepaidOption}}" class="form-item">
+      <view class="switch-item">
+        <text class="switch-label">打平伙</text>
+        <switch checked="{{isPrepaid}}" bindchange="togglePrepaid" disabled="{{isEdit && originalIsPrepaid}}" />
+      </view>
+      <view wx:if="{{isEdit && originalIsPrepaid}}" class="switch-hint">创建时已选择打平伙，不可修改</view>
+    </view>
+    
+    <view wx:if="{{isPrepaid}}" class="form-item">
+      <text class="label">保管人员</text>
+      <view class="keeper-tags">
+        <view wx:for="{{keeperList}}" wx:key="name" class="keeper-tag {{keeper === item.name ? 'active' : ''}}" bindtap="selectKeeper" data-name="{{item.name}}">
+          {{item.name}}
+        </view>
+      </view>
+    </view>
+    
     <button class="btn btn-full" bindtap="saveActivity">{{isEdit ? '更新' : '创建'}}</button>
   </view>
 </view>

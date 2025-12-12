@@ -94,13 +94,22 @@ Page({
           : '暂无成员';
         
         console.log(`活动 ${act.name} 的成员:`, finalMemberNames, '显示文本:', memberNamesText);
+        console.log(`活动 ${act.name} - isPrepaid 原始值:`, act.isPrepaid, '类型:', typeof act.isPrepaid);
+        
+        // 判断是否是打平伙活动（支持布尔值、字符串、数字等多种格式）
+        let isPrepaidValue = false;
+        if (act.isPrepaid === true || act.isPrepaid === 'true' || act.isPrepaid === 1 || act.isPrepaid === '1') {
+          isPrepaidValue = true;
+        }
+        console.log(`活动 ${act.name} - isPrepaid 处理后:`, isPrepaidValue);
         
         return {
           ...act,
           members: members,
           memberNames: finalMemberNames, // 数组形式
           memberNamesText: memberNamesText, // 字符串形式，用于显示
-          isCreator: act.creator === userName
+          isCreator: act.creator === userName,
+          isPrepaid: isPrepaidValue // 是否打平伙活动
         };
       }));
       
@@ -115,12 +124,15 @@ Page({
         const memberText = act.memberNamesText || (act.memberNames && act.memberNames.length > 0 
           ? act.memberNames.join('、') 
           : '暂无成员');
+        const isPrepaid = act.isPrepaid === true || act.isPrepaid === 'true';
+        console.log(`准备设置 - 活动 ${act.name} - isPrepaid:`, isPrepaid, '原始值:', act.isPrepaid);
         return {
           _id: act._id,
           name: act.name,
           type: act.type,
           creator: act.creator,
           isCreator: act.isCreator,
+          isPrepaid: isPrepaid, // 是否打平伙活动
           memberNames: act.memberNames,
           memberNamesText: memberText, // 确保这个字段存在
         };

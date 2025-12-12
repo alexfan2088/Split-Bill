@@ -10,6 +10,11 @@ Page({
     type: '',
     membersText: '',
     remark: '',
+    isPrepaid: false, // 是否打平伙
+    originalIsPrepaid: false, // 原始活动的打平伙状态（用于编辑时判断）
+    showPrepaidOption: true, // 是否显示打平伙选项
+    keeper: '', // 保管人员
+    keeperList: [], // 保管人员列表（从成员中选择）
     creator: '', // 活动创建者
     defaultTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 系统默认类型（不可删除）
     commonTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 常用类型（包含系统类型和自定义类型）
@@ -54,6 +59,7 @@ Page({
         memberNames = memberNames.filter(name => name !== creator); // 移除创建者（如果存在）
         memberNames.unshift(creator); // 将创建者添加到第一位
         
+        const originalIsPrepaid = activity.isPrepaid || false;
         this.setData({
           isEdit: true,
           activityId: activity._id,
@@ -61,6 +67,11 @@ Page({
           type: activity.type || '',
           membersText: memberNames.join('\n'),
           remark: activity.remark || '',
+          isPrepaid: originalIsPrepaid,
+          originalIsPrepaid: originalIsPrepaid, // 保存原始值
+          showPrepaidOption: originalIsPrepaid, // 只有原始活动是打平伙时才显示
+          keeper: activity.keeper || '',
+          keeperList: memberNames.map(name => ({ name })),
           creator: creator,
         });
         wx.setNavigationBarTitle({
@@ -216,16 +227,59 @@ Page({
           // 确保创建者在第一位
           const newLines = [creator, ...cleanLines];
           this.setData({ membersText: newLines.join('\n') });
+          
+          // 如果已经选择了打平伙，同步更新保管人员列表
+          if (this.data.isPrepaid) {
+            this.setData({
+              keeperList: newLines.map(name => ({ name }))
+            });
+          }
         }
       });
       return; // 不更新输入框，等待对话框关闭后自动恢复
     }
     
     this.setData({ membersText: inputValue });
+    
+    // 如果已经选择了打平伙，同步更新保管人员列表
+    if (this.data.isPrepaid) {
+      const memberNames = inputValue.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+      this.setData({
+        keeperList: memberNames.map(name => ({ name }))
+      });
+    }
   },
   
   onRemarkInput(e) {
     this.setData({ remark: e.detail.value });
+  },
+  
+  // 切换打平伙选项
+  togglePrepaid(e) {
+    // 如果是编辑模式且原始活动是打平伙，不允许修改
+    if (this.data.isEdit && this.data.originalIsPrepaid) {
+      return;
+    }
+    const isPrepaid = e.detail.value;
+    this.setData({ isPrepaid });
+    
+    // 如果选择打平伙，初始化保管人员列表
+    if (isPrepaid && this.data.membersText) {
+      const memberNames = this.data.membersText.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+      this.setData({
+        keeperList: memberNames.map(name => ({ name }))
+      });
+    }
+  },
+  
+  // 选择保管人员
+  selectKeeper(e) {
+    const keeper = e.currentTarget.dataset.name;
+    this.setData({ keeper });
   },
   
   async saveActivity() {
@@ -238,6 +292,16 @@ Page({
       wx.showToast({
         title: '请输入活动名称',
         icon: 'none'
+      });
+      return;
+    }
+    
+    if (!type) {
+      wx.showModal({
+        title: '提示',
+        content: '请选择或输入活动类型',
+        showCancel: false,
+        confirmText: '确定'
       });
       return;
     }
@@ -279,15 +343,21 @@ Page({
       
       if (this.data.isEdit) {
         // 更新活动
+        const updateData = {
+          name,
+          type,
+          remark,
+          isPrepaid: this.data.isPrepaid,
+          members,
+          memberNames,
+          updatedAt: new Date()
+        };
+        // 如果是打平伙活动，保存保管人员
+        if (this.data.isPrepaid) {
+          updateData.keeper = this.data.keeper;
+        }
         await dbCloud.collection('activities').doc(this.data.activityId).update({
-          data: {
-            name,
-            type,
-            remark,
-            members,
-            memberNames,
-            updatedAt: new Date()
-          }
+          data: updateData
         });
         
         // 更新活动的group
@@ -312,16 +382,23 @@ Page({
         });
       } else {
         // 创建活动
+        console.log('创建活动，isPrepaid:', this.data.isPrepaid);
+        const createData = {
+          name,
+          type,
+          remark,
+          isPrepaid: this.data.isPrepaid,
+          members,
+          memberNames,
+          creator: userName,
+          createdAt: new Date()
+        };
+        // 如果是打平伙活动，保存保管人员
+        if (this.data.isPrepaid) {
+          createData.keeper = this.data.keeper;
+        }
         const actRes = await dbCloud.collection('activities').add({
-          data: {
-            name,
-            type,
-            remark,
-            members,
-            memberNames,
-            creator: userName,
-            createdAt: new Date()
-          }
+          data: createData
         });
         
         // 创建活动的group

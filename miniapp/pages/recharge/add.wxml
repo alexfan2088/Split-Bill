@@ -1,0 +1,36 @@
+<!--pages/recharge/add.wxml-->
+<view class="container">
+  <view class="form">
+    <view class="form-item">
+      <text class="label">金额（元）</text>
+      <input class="input" type="digit" placeholder="0.00" value="{{amount}}" bindinput="onAmountInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="label">日期</text>
+      <picker mode="date" value="{{date}}" bindchange="onDateChange">
+        <view class="picker">{{date || '选择日期'}}</view>
+      </picker>
+    </view>
+
+    <view class="form-item">
+      <text class="label">充值人员</text>
+      <view class="payer-tags">
+        <view wx:for="{{payerList}}" wx:key="name" class="payer-tag {{selectedPayer === item.name ? 'active' : ''}}" bindtap="selectPayer" data-name="{{item.name}}">
+          {{item.name}}
+        </view>
+      </view>
+    </view>
+
+    <view class="form-item">
+      <text class="label">保管人员</text>
+      <view class="keeper-display">
+        <text class="keeper-name">{{keeper || '未设置'}}</text>
+      </view>
+      <view class="hint">保管人员由活动创建时设置，不可修改</view>
+    </view>
+
+    <button class="btn btn-full" bindtap="saveRecharge">保存充值</button>
+  </view>
+</view>
+

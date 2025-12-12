@@ -27,6 +27,15 @@
   font-weight: bold;
   color: #333;
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.prepaid-tag {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #007bff;
 }
 
 .activity-creator {
@@ -327,6 +336,132 @@
 .suggestion-name {
   color: #007bff;
   font-weight: bold;
+}
+
+/* 打平伙相关样式 */
+.recharge-content {
+  background-color: white;
+  border-radius: 8rpx;
+  padding: 30rpx;
+}
+
+.recharge-summary {
+  margin-bottom: 30rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 2rpx solid #e0e0e0;
+}
+
+.recharge-summary-item {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.recharge-label {
+  color: #666;
+}
+
+.recharge-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.recharge-value.amount {
+  color: #137333;
+  font-weight: bold;
+}
+
+.recharge-list {
+  margin-bottom: 20rpx;
+}
+
+.recharge-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.recharge-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.recharge-date {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.recharge-payer {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.recharge-amount {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #137333;
+  margin-right: 16rpx;
+}
+
+.prepaid-summary {
+  background-color: #f0f7ff;
+  border-left: 8rpx solid #007bff;
+  padding: 24rpx;
+  border-radius: 8rpx;
+  margin-bottom: 30rpx;
+}
+
+.prepaid-item {
+  font-size: 28rpx;
+  color: #333;
+  margin-bottom: 12rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.prepaid-item:last-child {
+  margin-bottom: 0;
+}
+
+.prepaid-label {
+  color: #666;
+}
+
+.prepaid-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.prepaid-value.amount {
+  color: #137333;
+  font-weight: bold;
+}
+
+.prepaid-value.positive {
+  color: #137333;
+}
+
+.prepaid-value.negative {
+  color: #c5221f;
+  font-weight: bold;
+}
+
+.recharge-alert {
+  margin-top: 16rpx;
+  padding: 16rpx;
+  background-color: #fff3cd;
+  border: 2rpx solid #ffc107;
+  border-radius: 8rpx;
+}
+
+.alert-text {
+  font-size: 26rpx;
+  color: #856404;
+  font-weight: 500;
 }
 
 
