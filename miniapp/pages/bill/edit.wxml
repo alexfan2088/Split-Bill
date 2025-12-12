@@ -48,7 +48,7 @@
     
     <view class="form-item">
       <text class="label">备注</text>
-      <textarea class="textarea" placeholder="可选" value="{{remark}}" bindinput="onRemarkInput" disabled="{{isReadOnly}}" />
+      <textarea class="textarea" placeholder="可选（最多20个汉字）" value="{{remark}}" bindinput="onRemarkInput" disabled="{{isReadOnly}}" auto-height="{{false}}" maxlength="20" />
     </view>
     
     <button wx:if="{{!isReadOnly}}" class="btn btn-full" bindtap="saveBill">{{isEdit ? '更新账单' : '保存账单'}}</button>

@@ -52,12 +52,14 @@
 
 .textarea {
   width: 100%;
-  min-height: 100rpx; /* 两行高度 */
+  height: 100rpx; /* 固定高度，两行 */
+  min-height: 100rpx; /* 最小高度 */
   padding: 20rpx;
   border: 2rpx solid #ddd;
   border-radius: 8rpx;
   font-size: 28rpx;
   line-height: 1.5; /* 设置行高，使文字更紧凑 */
+  box-sizing: border-box; /* 包含padding和border */
 }
 
 .participants-list {
