@@ -169,44 +169,95 @@ Page({
       return circles;
     }
     
-    // 按姓氏分组统计
-    const surnameMap = {};
-    Object.keys(bill.participants).forEach(name => {
+    // 获取所有权重大于0的成员名称
+    const membersWithWeight = Object.keys(bill.participants).filter(name => {
       const weight = bill.participants[name] || 0;
-      if (weight > 0) {
-        const surname = name.charAt(0);
-        if (!surnameMap[surname]) {
-          surnameMap[surname] = 0;
-        }
-        surnameMap[surname] += weight;
-      }
+      return weight > 0;
     });
     
-    const surnames = Object.keys(surnameMap);
     const maxDisplay = 3;
-    const displayedSurnames = surnames.slice(0, maxDisplay);
     
-    // 生成圆圈
-    for (let i = 0; i < maxDisplay; i++) {
-      if (i < displayedSurnames.length) {
-        const surname = displayedSurnames[i];
-        const hasPayer = Object.keys(bill.participants).some(name => 
-          name.charAt(0) === surname && bill.participants[name] > 0 && bill.payer === name
-        );
-        const color = hasPayer ? '#007bff' : '#D4A574';
-        
-        circles.push({
-          type: 'solid',
-          surname: surname,
-          color: color,
-          marginLeft: i === 0 ? '0' : '-7px',
-        });
+    // 如果超过3个人，确保付款人必须显示，其他随机选择
+    if (membersWithWeight.length > maxDisplay) {
+      const payer = bill.payer;
+      let displayMembers = [];
+      
+      // 如果付款人权重大于0，确保付款人在列表中
+      if (payer && membersWithWeight.includes(payer)) {
+        displayMembers.push(payer);
+        // 从剩余成员中随机选择2个
+        const remainingMembers = membersWithWeight.filter(name => name !== payer);
+        // 随机打乱并取前2个
+        const shuffled = remainingMembers.sort(() => Math.random() - 0.5);
+        displayMembers = displayMembers.concat(shuffled.slice(0, 2));
       } else {
-        // 虚线圆
-        circles.push({
-          type: 'dashed',
-          marginLeft: i === 0 ? '0' : '-7px',
-        });
+        // 如果付款人不在权重大于0的列表中，随机选择3个
+        const shuffled = membersWithWeight.sort(() => Math.random() - 0.5);
+        displayMembers = shuffled.slice(0, maxDisplay);
+      }
+      
+      // 生成圆圈（按姓氏显示）
+      for (let i = 0; i < maxDisplay; i++) {
+        if (i < displayMembers.length) {
+          const memberName = displayMembers[i];
+          const surname = memberName.charAt(0);
+          const isPayer = memberName === payer;
+          const color = isPayer ? '#007bff' : '#D4A574';
+          
+          circles.push({
+            type: 'solid',
+            surname: surname,
+            color: color,
+            marginLeft: i === 0 ? '0' : '-7px',
+          });
+        } else {
+          // 虚线圆
+          circles.push({
+            type: 'dashed',
+            marginLeft: i === 0 ? '0' : '-7px',
+          });
+        }
+      }
+    } else {
+      // 如果不超过3个人，按原来的逻辑（按姓氏分组显示）
+      // 按姓氏分组统计
+      const surnameMap = {};
+      Object.keys(bill.participants).forEach(name => {
+        const weight = bill.participants[name] || 0;
+        if (weight > 0) {
+          const surname = name.charAt(0);
+          if (!surnameMap[surname]) {
+            surnameMap[surname] = 0;
+          }
+          surnameMap[surname] += weight;
+        }
+      });
+      
+      const surnames = Object.keys(surnameMap);
+      const displayedSurnames = surnames.slice(0, maxDisplay);
+      
+      // 生成圆圈
+      for (let i = 0; i < maxDisplay; i++) {
+        if (i < displayedSurnames.length) {
+          const surname = displayedSurnames[i];
+          const hasPayer = Object.keys(bill.participants).some(name => 
+            name.charAt(0) === surname && bill.participants[name] > 0 && bill.payer === name
+          );
+          const color = hasPayer ? '#007bff' : '#D4A574';
+          
+          circles.push({
+            type: 'solid',
+            surname: surname,
+            color: color,
+            marginLeft: i === 0 ? '0' : '-7px',
+          });
+        } else {
+          // 虚线圆
+          circles.push({
+            type: 'dashed',
+            marginLeft: i === 0 ? '0' : '-7px',
+          });
+        }
       }
     }
     

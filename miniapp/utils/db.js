@@ -306,11 +306,52 @@ async function deleteBill(billId) {
   }
 }
 
-// 删除活动
+// 删除活动（同时删除关联的账单和group）
 async function deleteActivity(activityId) {
   try {
+    // 1. 先删除该活动下的所有账单
+    try {
+      const billsRes = await db.collection('bills')
+        .where({ activityId: activityId })
+        .get();
+      
+      if (billsRes.data && billsRes.data.length > 0) {
+        console.log(`删除活动 ${activityId} 下的 ${billsRes.data.length} 个账单`);
+        // 批量删除账单
+        const deletePromises = billsRes.data.map(bill => 
+          db.collection('bills').doc(bill._id).remove()
+        );
+        await Promise.all(deletePromises);
+        console.log('所有账单已删除');
+      }
+    } catch (e) {
+      console.error('删除账单失败:', e);
+      // 继续删除活动，不因为账单删除失败而中断
+    }
+    
+    // 2. 删除关联的group
+    try {
+      const groupsRes = await db.collection('groups')
+        .where({ activityId: activityId })
+        .get();
+      
+      if (groupsRes.data && groupsRes.data.length > 0) {
+        console.log(`删除活动 ${activityId} 下的 ${groupsRes.data.length} 个group`);
+        const deletePromises = groupsRes.data.map(group => 
+          db.collection('groups').doc(group._id).remove()
+        );
+        await Promise.all(deletePromises);
+        console.log('所有group已删除');
+      }
+    } catch (e) {
+      console.error('删除group失败:', e);
+      // 继续删除活动，不因为group删除失败而中断
+    }
+    
+    // 3. 最后删除活动本身
     await db.collection('activities').doc(activityId).remove();
-    // 同时删除关联的group和bills（可选）
+    console.log('活动已删除');
+    
     return { success: true };
   } catch (e) {
     console.error('删除活动失败:', e);

@@ -1,9 +1,27 @@
 <!--pages/activity/detail.wxml-->
 <view class="container">
   <view class="header">
-    <view class="activity-title">{{activity.name}}</view>
+    <view class="activity-header">
+      <view class="activity-title-row">
+        <view class="activity-title">{{activity.name}}</view>
+        <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
+      </view>
+      <view class="activity-creator" wx:if="{{activity.creator}}">创建者：<text class="creator-name">{{activity.creator}}</text></view>
+    </view>
     <view class="activity-meta">{{activityMeta}}</view>
-    <button wx:if="{{isCreator}}" class="btn-edit-activity" size="mini" bindtap="editActivity">编辑活动</button>
+    
+    <!-- 结算信息 -->
+    <view class="summary-info">
+      <view class="summary-info-item">
+        <text class="summary-label">总支出：</text>
+        <text class="summary-value amount">¥{{total}}</text>
+        <text class="summary-label" style="margin-left: 20rpx;">人均：</text>
+        <text class="summary-value">¥{{avg}}</text>
+      </view>
+      <view class="summary-info-item">
+        <text class="summary-label">{{dateRange}} | 账单数量：{{bills.length}} 条</text>
+      </view>
+    </view>
   </view>
   
   <view class="tabs">
@@ -43,12 +61,6 @@
   <!-- 结算 Tab -->
   <view wx:if="{{currentTab === 'summary'}}" class="tab-content">
     <view class="summary-content">
-      <view class="summary-header">
-        <view class="summary-total">总支出：<text class="amount">¥{{total}}</text></view>
-        <view class="summary-meta">{{dateRange}} | 账单数量：{{bills.length}} 条</view>
-        <view class="summary-avg">按权重人均：¥{{avg}} / 权重1人</view>
-      </view>
-      
       <view class="member-list">
         <view wx:for="{{members}}" wx:key="name" class="member-item">
           <view class="member-info">

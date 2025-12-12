@@ -11,16 +11,85 @@
   margin-bottom: 20rpx;
 }
 
+.activity-header {
+  margin-bottom: 12rpx;
+}
+
+.activity-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
 .activity-title {
-  font-size: 36rpx;
+  font-size: 48rpx; /* 从36rpx增加到48rpx（大两号） */
   font-weight: bold;
   color: #333;
-  margin-bottom: 12rpx;
+  flex: 1;
+}
+
+.activity-creator {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 8rpx;
+}
+
+.creator-name {
+  color: #007bff; /* 创建者名称用蓝色 */
+  font-weight: 500;
 }
 
 .activity-meta {
   font-size: 26rpx;
   color: #666;
+  margin-bottom: 12rpx;
+}
+
+.summary-info {
+  margin-top: 0;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.summary-info-item {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 8rpx;
+  line-height: 1.5;
+}
+
+.summary-info-item:last-child {
+  margin-bottom: 0;
+}
+
+.summary-label {
+  color: #666;
+}
+
+.summary-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.summary-value.amount {
+  color: #137333;
+  font-weight: bold;
+}
+
+.btn-edit-activity {
+  background-color: #007bff;
+  color: white;
+  font-size: 24rpx;
+  padding: 8rpx 20rpx;
+  border-radius: 6rpx;
+  margin-left: 20rpx;
+}
+
+.btn-edit-activity.disabled {
+  background-color: #e0e0e0;
+  color: #999;
+  opacity: 0.6;
 }
 
 .tabs {
@@ -123,14 +192,14 @@
 }
 
 .bill-title {
-  font-size: 22rpx;
+  font-size: 25rpx;
   color: #333;
   line-height: 1.3;
   margin-bottom: 4rpx;
 }
 
 .bill-date {
-  font-size: 20rpx;
+  font-size: 21rpx;
   color: #999;
   line-height: 1.3;
 }
@@ -204,7 +273,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24rpx 0;
+  padding: 18rpx 0;
   border-bottom: 1rpx solid #f0f0f0;
 }
 

@@ -322,6 +322,21 @@ Page({
     console.log('当前活动成员:', currentMemberNames);
     console.log('准备保存的participants:', participants);
     
+    // 检查付款人的权重是否大于0
+    const payerWeight = participants[payer] || 0;
+    if (payerWeight <= 0) {
+      wx.showModal({
+        title: '提示',
+        content: '付款人的权重必须大于0，请修改后重试。',
+        showCancel: false,
+        confirmText: '确定',
+        success: () => {
+          // 对话框关闭后，焦点会自动回到页面
+        }
+      });
+      return;
+    }
+    
     // 检查是否有权重大于0的成员
     const namesWithWeight = Object.keys(participants).filter(name => participants[name] > 0);
     if (namesWithWeight.length === 0) {
@@ -398,35 +413,55 @@ Page({
       
       if (this.data.isEdit) {
         // 更新账单
-        // 先获取当前账单数据，检查是否有旧成员需要清除
-        const currentBill = await dbCloud.collection('bills').doc(this.data.billId).get();
-        const oldParticipants = currentBill.data.participants || {};
-        const currentMemberNames = this.data.participants.map(p => p.name);
+        // 更新时，必须明确设置所有字段，确保完全覆盖旧数据
+        // 特别是participants和splitDetail，必须根据新的权重重新计算
+        console.log('更新账单，billData.participants:', billData.participants);
+        console.log('更新账单，billData.splitDetail:', billData.splitDetail);
+        console.log('当前活动成员列表:', currentMemberNames);
         
-        // 检查是否有旧成员需要清除
-        const oldMemberNames = Object.keys(oldParticipants).filter(name => !currentMemberNames.includes(name));
-        if (oldMemberNames.length > 0) {
-          console.log('发现需要清除的旧成员:', oldMemberNames);
+        // 先读取当前账单，获取系统字段（_id, _openid, creator, createdAt等）
+        const currentBillDoc = await dbCloud.collection('bills').doc(this.data.billId).get();
+        const currentBill = currentBillDoc.data;
+        const oldParticipants = currentBill.participants || {};
+        const oldParticipantNames = Object.keys(oldParticipants);
+        
+        // 找出需要删除的旧成员（不在当前活动成员列表中的）
+        const oldMembersToRemove = oldParticipantNames.filter(name => !currentMemberNames.includes(name));
+        if (oldMembersToRemove.length > 0) {
+          console.log('发现需要删除的旧成员:', oldMembersToRemove);
           console.log('旧participants:', oldParticipants);
         }
         
-        console.log('更新账单，billData.participants:', billData.participants);
-        console.log('更新账单，billData.splitDetail:', billData.splitDetail);
+        // 使用 set 方法完全替换文档，确保清除所有旧成员数据
+        // 构建完全干净的数据对象，只包含当前活动成员
+        const cleanBillData = {
+          activityId: billData.activityId,
+          amount: billData.amount,
+          title: billData.title,
+          payer: billData.payer,
+          participants: billData.participants, // 只包含当前活动成员，完全替换旧对象
+          splitDetail: billData.splitDetail,   // 只包含当前活动成员，完全替换旧对象
+          time: billData.time,
+          remark: billData.remark,
+          creator: currentBill.creator || userName, // 保留创建者
+          createdAt: currentBill.createdAt || new Date(), // 保留创建时间
+          updatedAt: new Date(),
+        };
         
-        // 更新时，使用billData（已经清理过），确保清除旧成员
-        await dbCloud.collection('bills').doc(this.data.billId).update({
-          data: {
-            ...billData,
-            updatedAt: new Date(),
-          }
+        // 使用 set 方法完全替换文档，确保清除所有旧字段（包括旧成员的participants和splitDetail）
+        await dbCloud.collection('bills').doc(this.data.billId).set({
+          data: cleanBillData
         });
         
         // 验证更新后的数据
         const updatedBill = await dbCloud.collection('bills').doc(this.data.billId).get();
         const updatedParticipants = updatedBill.data.participants || {};
+        const updatedSplitDetail = updatedBill.data.splitDetail || {};
         console.log('更新后的账单数据:', updatedBill.data);
         console.log('更新后的participants:', updatedParticipants);
+        console.log('更新后的splitDetail:', updatedSplitDetail);
         console.log('更新后的participants keys:', Object.keys(updatedParticipants));
+        console.log('更新后的splitDetail keys:', Object.keys(updatedSplitDetail));
         
         // 验证是否还有旧成员
         const remainingOldMembers = Object.keys(updatedParticipants).filter(name => !currentMemberNames.includes(name));
@@ -434,6 +469,14 @@ Page({
           console.error('错误：更新后仍有旧成员:', remainingOldMembers);
         } else {
           console.log('✓ 更新成功，已清除所有旧成员');
+        }
+        
+        // 验证splitDetail是否包含所有成员
+        const missingInSplitDetail = currentMemberNames.filter(name => !updatedSplitDetail.hasOwnProperty(name));
+        if (missingInSplitDetail.length > 0) {
+          console.error('错误：splitDetail中缺少成员:', missingInSplitDetail);
+        } else {
+          console.log('✓ splitDetail包含所有成员');
         }
         
         wx.hideLoading();
