@@ -11,7 +11,8 @@ Page({
     membersText: '',
     remark: '',
     creator: '', // 活动创建者
-    commonTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 常用类型
+    defaultTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 系统默认类型（不可删除）
+    commonTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 常用类型（包含系统类型和自定义类型）
   },
   
   async onLoad(options) {
@@ -89,11 +90,11 @@ Page({
   // 加载常用类型列表
   loadCommonTypes() {
     try {
-      const savedTypes = wx.getStorageSync('aa_common_activity_types');
-      if (savedTypes && Array.isArray(savedTypes) && savedTypes.length > 0) {
-        // 合并默认类型和保存的类型，去重
-        const defaultTypes = ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'];
-        const allTypes = [...new Set([...defaultTypes, ...savedTypes])];
+      const savedCustomTypes = wx.getStorageSync('aa_common_activity_types');
+      if (savedCustomTypes && Array.isArray(savedCustomTypes) && savedCustomTypes.length > 0) {
+        // 合并默认类型和保存的自定义类型，去重
+        const defaultTypes = this.data.defaultTypes;
+        const allTypes = [...new Set([...defaultTypes, ...savedCustomTypes])];
         this.setData({ commonTypes: allTypes });
       }
     } catch (e) {
@@ -101,10 +102,13 @@ Page({
     }
   },
   
-  // 保存常用类型列表
+  // 保存常用类型列表（只保存自定义类型）
   saveCommonTypes() {
     try {
-      wx.setStorageSync('aa_common_activity_types', this.data.commonTypes);
+      // 只保存自定义类型（排除系统默认类型）
+      const defaultTypes = this.data.defaultTypes;
+      const customTypes = this.data.commonTypes.filter(type => !defaultTypes.includes(type));
+      wx.setStorageSync('aa_common_activity_types', customTypes);
     } catch (e) {
       console.error('保存常用类型失败:', e);
     }
@@ -114,6 +118,49 @@ Page({
   selectType(e) {
     const selectedType = e.currentTarget.dataset.type;
     this.setData({ type: selectedType });
+  },
+  
+  // 长按删除自定义类型
+  deleteType(e) {
+    const typeToDelete = e.currentTarget.dataset.type;
+    const defaultTypes = this.data.defaultTypes;
+    
+    // 检查是否是系统默认类型
+    if (defaultTypes.includes(typeToDelete)) {
+      wx.showToast({
+        title: '系统类型不可删除',
+        icon: 'none',
+        duration: 2000
+      });
+      return;
+    }
+    
+    // 确认删除
+    wx.showModal({
+      title: '确认删除',
+      content: `确定要删除类型"${typeToDelete}"吗？`,
+      success: (res) => {
+        if (res.confirm) {
+          // 从常用类型列表中删除
+          const updatedTypes = this.data.commonTypes.filter(type => type !== typeToDelete);
+          this.setData({ commonTypes: updatedTypes });
+          
+          // 如果当前选中的类型被删除，清空输入框
+          if (this.data.type === typeToDelete) {
+            this.setData({ type: '' });
+          }
+          
+          // 保存到本地存储
+          this.saveCommonTypes();
+          
+          wx.showToast({
+            title: '已删除',
+            icon: 'success',
+            duration: 1500
+          });
+        }
+      }
+    });
   },
   
   onTypeInput(e) {
@@ -127,7 +174,7 @@ Page({
       // 新类型，添加到常用类型列表
       const updatedTypes = [...this.data.commonTypes, newType];
       this.setData({ commonTypes: updatedTypes });
-      this.saveCommonTypes();
+      this.saveCommonTypes(); // 只保存自定义类型
     }
   },
   
@@ -298,7 +345,7 @@ Page({
       if (type && !this.data.commonTypes.includes(type)) {
         const updatedTypes = [...this.data.commonTypes, type];
         this.setData({ commonTypes: updatedTypes });
-        this.saveCommonTypes();
+        this.saveCommonTypes(); // 只保存自定义类型
       }
       
       // 返回上一页

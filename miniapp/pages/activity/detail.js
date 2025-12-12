@@ -105,7 +105,30 @@ Page({
       
       // 计算总支出和人均
       const total = bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-      const totalWeight = (activity.members || []).reduce((sum, m) => sum + (Number(m.weight) || 2), 0) || 1;
+      
+      // 计算总权重：基于所有账单的participants权重之和
+      // 如果账单有participants，使用账单的权重；否则使用活动成员的默认权重
+      let totalWeight = 0;
+      if (bills.length > 0) {
+        // 使用最近一次账单的participants权重来计算人均
+        // 找到最近一次账单（按时间排序，取第一个）
+        const latestBill = bills[0]; // bills已经按时间倒序排序
+        if (latestBill.participants) {
+          // 计算最近一次账单的participants权重之和
+          Object.keys(latestBill.participants).forEach(name => {
+            const weight = Number(latestBill.participants[name]) || 0;
+            if (weight > 0) {
+              totalWeight += weight;
+            }
+          });
+        }
+      }
+      
+      // 如果没有账单或账单没有participants，使用活动成员的默认权重
+      if (totalWeight === 0) {
+        totalWeight = (activity.members || []).reduce((sum, m) => sum + (Number(m.weight) || 2), 0) || 1;
+      }
+      
       const avg = total / totalWeight;
       
       // 计算日期范围

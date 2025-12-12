@@ -9,7 +9,7 @@
     <view class="form-item">
       <text class="label">活动类型</text>
       <view class="type-tags">
-        <view wx:for="{{commonTypes}}" wx:key="*this" class="type-tag {{type === item ? 'active' : ''}}" bindtap="selectType" data-type="{{item}}">
+        <view wx:for="{{commonTypes}}" wx:key="*this" class="type-tag {{type === item ? 'active' : ''}}" bindtap="selectType" bindlongpress="deleteType" data-type="{{item}}">
           {{item}}
         </view>
       </view>
