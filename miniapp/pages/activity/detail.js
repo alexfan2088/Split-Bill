@@ -16,6 +16,7 @@ Page({
     suggestionMember: null,
     isCreator: false, // 是否是活动创建者
     isPrepaid: false, // 是否打平伙
+    keeper: '', // 保管人员
     recharges: [], // 充值列表
     totalRecharge: 0, // 充值总金额
     totalConsume: 0, // 消费总金额
@@ -122,12 +123,27 @@ Page({
               .orderBy('date', 'desc')
               .get();
           } catch (e) {
-            rechargesRes = await dbCloud.collection('recharges')
-              .where({ activityId: activityId })
-              .orderBy('createdAt', 'desc')
-              .get();
+            try {
+              rechargesRes = await dbCloud.collection('recharges')
+                .where({ activityId: activityId })
+                .orderBy('createdAt', 'desc')
+                .get();
+            } catch (e2) {
+              // 如果createdAt也没有索引，尝试不使用排序
+              console.log('结算计算 - 尝试不使用排序:', e2);
+              try {
+                rechargesRes = await dbCloud.collection('recharges')
+                  .where({ activityId: activityId })
+                  .get();
+              } catch (e3) {
+                console.error('结算计算 - 加载充值记录失败（可能是权限问题）:', e3);
+                rechargesRes = { data: [] };
+              }
+            }
           }
           const recharges = rechargesRes.data || [];
+          console.log('结算计算使用的充值记录数量:', recharges.length);
+          console.log('结算计算使用的充值记录:', recharges.map(r => ({ payer: r.payer, amount: r.amount })));
           balances = this.calcBalances(activity.members || [], bills, recharges);
         } catch (e) {
           console.error('加载充值数据失败:', e);
@@ -193,23 +209,91 @@ Page({
       if (activity.isPrepaid) {
         try {
           const dbCloud = wx.cloud.database();
+          console.log('🔍 开始查询充值记录，activityId:', activityId);
+          
           let rechargesRes;
+          let queryError = null;
+          
           try {
             // 尝试使用date字段排序
+            console.log('📅 尝试使用date字段排序查询...');
             rechargesRes = await dbCloud.collection('recharges')
               .where({ activityId: activityId })
               .orderBy('date', 'desc')
               .get();
+            console.log('✅ 查询成功，返回数据:', rechargesRes);
           } catch (e) {
+            queryError = e;
+            console.log('⚠️ date字段排序失败，错误:', e);
+            console.log('错误码:', e.errCode, '错误信息:', e.errMsg);
+            
             // 如果date字段没有索引，使用createdAt排序
-            console.log('使用createdAt排序:', e);
-            rechargesRes = await dbCloud.collection('recharges')
-              .where({ activityId: activityId })
-              .orderBy('createdAt', 'desc')
-              .get();
+            try {
+              console.log('📅 尝试使用createdAt排序查询...');
+              rechargesRes = await dbCloud.collection('recharges')
+                .where({ activityId: activityId })
+                .orderBy('createdAt', 'desc')
+                .get();
+              console.log('✅ 查询成功，返回数据:', rechargesRes);
+            } catch (e2) {
+              queryError = e2;
+              console.log('⚠️ createdAt排序也失败，错误:', e2);
+              console.log('错误码:', e2.errCode, '错误信息:', e2.errMsg);
+              
+              // 如果createdAt也没有索引，尝试不使用排序
+              try {
+                console.log('📅 尝试不使用排序查询...');
+                rechargesRes = await dbCloud.collection('recharges')
+                  .where({ activityId: activityId })
+                  .get();
+                console.log('✅ 查询成功，返回数据:', rechargesRes);
+              } catch (e3) {
+                queryError = e3;
+                console.error('❌ 所有查询方式都失败:', e3);
+                console.error('错误码:', e3.errCode, '错误信息:', e3.errMsg);
+                wx.showToast({
+                  title: '加载充值记录失败，请检查数据库权限',
+                  icon: 'none',
+                  duration: 3000
+                });
+                rechargesRes = { data: [] };
+              }
+            }
           }
           
           recharges = rechargesRes.data || [];
+          
+          console.log('📊 查询结果统计:');
+          console.log('  - 加载的充值记录数量:', recharges.length);
+          console.log('  - 返回的原始数据:', rechargesRes);
+          console.log('  - 充值记录详情:', recharges.map(r => ({ 
+            _id: r._id, 
+            payer: r.payer, 
+            amount: r.amount, 
+            creator: r.creator, 
+            recorder: r.recorder,
+            activityId: r.activityId
+          })));
+          
+          // 如果充值记录数量为0，但活动是打平伙，可能是权限问题
+          if (recharges.length === 0 && activity.isPrepaid) {
+            console.warn('⚠️ 警告：打平伙活动但没有充值记录！');
+            console.warn('可能的原因：');
+            console.warn('  1. 数据库权限问题 - recharges集合可能设置为"仅创建者可读"');
+            console.warn('  2. 确实没有充值记录');
+            console.warn('  3. activityId不匹配');
+            console.warn('当前查询的activityId:', activityId);
+            
+            // 尝试查询所有充值记录（不限制activityId）来测试权限
+            try {
+              console.log('🔍 测试：尝试查询所有充值记录（测试权限）...');
+              const testRes = await dbCloud.collection('recharges').limit(1).get();
+              console.log('✅ 权限测试结果 - 可以查询，返回:', testRes.data?.length || 0, '条记录');
+            } catch (testErr) {
+              console.error('❌ 权限测试失败:', testErr);
+              console.error('这确认了是数据库权限问题！');
+            }
+          }
           
           // 如果没有排序，手动按日期倒序排序
           if (recharges.length > 0) {
@@ -222,13 +306,28 @@ Page({
             });
           }
           
-          // 计算充值总金额
+          // 计算充值总金额（所有充值记录的总和）
           totalRecharge = recharges.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+          console.log('充值总金额:', totalRecharge);
           
           // 计算剩余金额
           remaining = totalRecharge - totalConsume;
         } catch (e) {
           console.error('加载充值数据失败:', e);
+          console.error('错误详情:', {
+            message: e.message,
+            errCode: e.errCode,
+            errMsg: e.errMsg
+          });
+          
+          // 如果是权限错误，提示用户
+          if (e.errCode === -601034 || e.errMsg && e.errMsg.includes('权限')) {
+            wx.showToast({
+              title: '数据库权限不足，请检查recharges集合权限设置',
+              icon: 'none',
+              duration: 3000
+            });
+          }
         }
       }
       
@@ -243,10 +342,12 @@ Page({
         suggestionMember,
         isCreator: isActivityCreator, // 保存是否是活动创建者
         isPrepaid: activity.isPrepaid || false,
+        keeper: activity.keeper || '', // 保管人员
         recharges: recharges.map(r => ({
           ...r,
           date: this.formatRechargeDate(r),
           amount: Number(r.amount || 0).toFixed(2),
+          recorder: r.recorder || r.creator, // 记录人，如果没有recorder字段则使用creator
           isCreator: r.creator === db.getCurrentUser(),
         })),
         totalRecharge: totalRecharge.toFixed(2),
@@ -419,13 +520,16 @@ Page({
       map[m.name] = { paid: 0, shouldPay: 0, balance: 0 };
     });
     
-    // 如果是打平伙活动，实付为充值金额
+    // 如果是打平伙活动，实付为充值金额（所有充值记录的总和）
     if (recharges.length > 0) {
+      console.log('计算实付 - 充值记录数量:', recharges.length);
       recharges.forEach(r => {
         const amount = Number(r.amount || 0);
         const payer = r.payer;
+        console.log(`充值记录 - 付款人: ${payer}, 金额: ${amount}`);
         if (payer && map[payer]) {
           map[payer].paid += amount;
+          console.log(`更新 ${payer} 的实付: ${map[payer].paid}`);
         }
       });
     } else {

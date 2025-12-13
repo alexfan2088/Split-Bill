@@ -9,7 +9,10 @@
         </view>
         <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
       </view>
-      <view class="activity-creator" wx:if="{{activity.creator}}">创建者：<text class="creator-name">{{activity.creator}}</text></view>
+      <view class="activity-creator" wx:if="{{activity.creator}}">
+        <text>创建者：<text class="creator-name">{{activity.creator}}</text></text>
+        <text wx:if="{{isPrepaid && keeper}}" class="keeper-info">保管者：<text class="keeper-name">{{keeper}}</text></text>
+      </view>
     </view>
     <view class="activity-meta">{{activityMeta}}</view>
     
@@ -77,13 +80,23 @@
           <text>暂无充值记录</text>
         </view>
         
+        <!-- 表头 -->
+        <view wx:if="{{recharges.length > 0}}" class="recharge-header">
+          <view class="recharge-header-item">日期</view>
+          <view class="recharge-header-item">充值人员</view>
+          <view class="recharge-header-item">金额</view>
+          <view class="recharge-header-item">记录人</view>
+          <view class="recharge-header-item">操作</view>
+        </view>
+        
         <view wx:for="{{recharges}}" wx:key="_id" class="recharge-item">
           <view class="recharge-info">
             <view class="recharge-date">{{item.date}}</view>
             <view class="recharge-payer">{{item.payer}}</view>
+            <view class="recharge-amount">¥{{item.amount}}</view>
+            <view class="recharge-recorder">{{item.recorder || item.creator}}</view>
           </view>
-          <view class="recharge-amount">¥{{item.amount}}</view>
-          <button wx:if="{{item.isCreator}}" class="btn-delete" size="mini" catchtap="deleteRecharge" data-id="{{item._id}}" data-payer="{{item.payer}}" data-amount="{{item.amount}}">删除</button>
+          <button class="btn-delete {{item.isCreator ? '' : 'disabled'}}" size="mini" catchtap="deleteRecharge" disabled="{{!item.isCreator}}" data-id="{{item._id}}" data-payer="{{item.payer}}" data-amount="{{item.amount}}">删除</button>
         </view>
       </view>
       

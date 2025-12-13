@@ -23,6 +23,14 @@
     </view>
 
     <view class="form-item">
+      <text class="label">记录人</text>
+      <view class="recorder-display">
+        <text class="recorder-name">{{currentUser}}</text>
+      </view>
+      <view class="hint">记录人默认为当前登录用户</view>
+    </view>
+
+    <view class="form-item">
       <text class="label">保管人员</text>
       <view class="keeper-display">
         <text class="keeper-name">{{keeper || '未设置'}}</text>

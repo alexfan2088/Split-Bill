@@ -42,10 +42,22 @@
   font-size: 26rpx;
   color: #666;
   margin-bottom: 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx; /* 创建者和保管者之间的间距 */
 }
 
 .creator-name {
   color: #007bff; /* 创建者名称用蓝色 */
+  font-weight: 500;
+}
+
+.keeper-info {
+  color: #666;
+}
+
+.keeper-name {
+  color: #007bff; /* 保管者名称用蓝色 */
   font-weight: 500;
 }
 
@@ -374,10 +386,35 @@
   margin-bottom: 20rpx;
 }
 
+.recharge-header {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid #e0e0e0;
+  background-color: #f9f9f9;
+  font-weight: bold;
+  font-size: 26rpx;
+  color: #333;
+}
+
+.recharge-header-item {
+  flex: 1;
+  text-align: center;
+}
+
+.recharge-header-item:first-child {
+  text-align: left;
+  padding-left: 0;
+}
+
+.recharge-header-item:last-child {
+  flex: 0 0 100rpx;
+  text-align: center;
+}
+
 .recharge-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 24rpx 0;
   border-bottom: 1rpx solid #f0f0f0;
 }
@@ -385,25 +422,54 @@
 .recharge-info {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 8rpx;
+  align-items: center;
+  gap: 10rpx;
 }
 
 .recharge-date {
-  font-size: 24rpx;
-  color: #999;
+  flex: 1;
+  font-size: 26rpx;
+  color: #333;
+  text-align: left;
 }
 
 .recharge-payer {
-  font-size: 28rpx;
-  color: #333;
+  flex: 1;
+  font-size: 26rpx;
+  color: #666;
+  text-align: center;
 }
 
 .recharge-amount {
-  font-size: 28rpx;
+  flex: 1;
+  font-size: 26rpx;
   font-weight: bold;
   color: #137333;
-  margin-right: 16rpx;
+  text-align: center;
+  margin-right: 0;
+}
+
+.recharge-recorder {
+  flex: 1;
+  font-size: 26rpx;
+  color: #666;
+  text-align: center;
+}
+
+.recharge-item .btn-delete {
+  flex: 0 0 100rpx;
+  background-color: #dc3545;
+  color: white;
+  font-size: 24rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 4rpx;
+  margin-left: 10rpx;
+}
+
+.recharge-item .btn-delete.disabled {
+  background-color: #e0e0e0;
+  color: #999;
+  opacity: 0.6;
 }
 
 .prepaid-summary {

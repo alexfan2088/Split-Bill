@@ -11,11 +11,15 @@ Page({
     selectedPayer: '',
     keeper: '', // 保管人员
     keeperList: [], // 保管人员列表
+    currentUser: '', // 当前登录用户（记录人）
   },
 
   onLoad(options) {
     if (options.activityId) {
       this.setData({ activityId: options.activityId });
+      // 获取当前登录用户作为记录人
+      const userName = db.getCurrentUser();
+      this.setData({ currentUser: userName });
       this.loadActivityMembers();
       this.initDate();
     }
@@ -130,6 +134,7 @@ Page({
           amount: amount,
           payer: this.data.selectedPayer,
           keeper: this.data.keeper,
+          recorder: userName, // 记录人
           date: date,
           creator: userName,
           createdAt: new Date()
