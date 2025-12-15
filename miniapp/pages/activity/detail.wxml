@@ -21,8 +21,6 @@
       <view class="summary-info-item">
         <text class="summary-label">总支出：</text>
         <text class="summary-value amount">¥{{total}}</text>
-        <text class="summary-label" style="margin-left: 20rpx;">人均：</text>
-        <text class="summary-value">¥{{avg}}</text>
       </view>
       <view class="summary-info-item">
         <text class="summary-label">{{dateRange}} | 账单数量：{{bills.length}} 条</text>
@@ -46,8 +44,11 @@
       <view wx:for="{{bills}}" wx:key="_id" class="bill-item" bindtap="viewBill" data-bill="{{item}}">
         <view class="bill-left">
           <view class="bill-circles">
-            <view wx:for="{{item.circles}}" wx:key="index" wx:for-item="circle" class="circle {{circle.type}}" style="margin-left: {{circle.marginLeft}}; background-color: {{circle.color}};">
-              <text wx:if="{{circle.surname}}">{{circle.surname}}</text>
+            <view wx:for="{{item.circles}}" wx:key="index" wx:for-item="circle" class="circle {{circle.type}}" style="margin-left: {{circle.marginLeft}}; {{circle.type === 'pie' ? '' : (circle.type === 'split' ? '' : 'background-color: ' + circle.color + ';')}}">
+              <view wx:if="{{circle.type === 'pie'}}" class="circle-pie">
+                <canvas type="2d" id="pieCanvas_{{item._id}}" class="pie-canvas" data-sectors="{{circle.sectors}}"></canvas>
+              </view>
+              <text wx:if="{{circle.surname && circle.type !== 'pie' && circle.type !== 'split'}}">{{circle.surname}}</text>
             </view>
           </view>
           <view class="bill-weight">{{item.totalCount}}</view>
@@ -127,7 +128,7 @@
       </view>
       
       <view class="member-list">
-        <view wx:for="{{members}}" wx:key="name" class="member-item">
+        <view wx:for="{{members}}" wx:key="name" class="member-item" bindtap="onMemberTap" data-name="{{item.name}}">
           <view class="member-info">
             <view class="member-name">{{item.name}}</view>
             <view class="member-detail">
@@ -148,6 +149,77 @@
       </view>
     </view>
   </view>
+
+    <!-- 成员账单列表弹层 -->
+    <view wx:if="{{showMemberBills}}" class="modal-mask" catchtouchmove="noop">
+      <view class="modal">
+        <view class="modal-header">
+          <text>{{selectedMemberName}} 账单明细</text>
+          <text class="modal-close" bindtap="closeMemberBills">×</text>
+        </view>
+        <scroll-view class="modal-body" scroll-y="true" show-scrollbar="{{false}}">
+          <!-- 汇总信息 -->
+          <view class="summary-section">
+            <view class="summary-row">
+              <text class="summary-label">收入：</text>
+              <text class="summary-value income">¥{{selectedMemberIncome}}</text>
+            </view>
+            <view class="summary-row">
+              <text class="summary-label">支出：</text>
+              <text class="summary-value expense">¥{{selectedMemberExpense}}</text>
+            </view>
+            <view class="summary-row">
+              <text class="summary-label">余额：</text>
+              <text class="summary-value balance {{selectedMemberBalance >= 0 ? 'positive' : 'negative'}}">¥{{selectedMemberBalance}}</text>
+            </view>
+          </view>
+          
+          <!-- 收入账单列表 -->
+          <view class="bill-section">
+            <view class="section-title">收入</view>
+            <view wx:if="{{selectedMemberBills.length === 0}}" class="empty-tip">暂无收入账单</view>
+            <view wx:if="{{selectedMemberBills.length > 0}}" class="bill-table">
+              <view class="bill-table-header">
+                <text class="col-name">名称</text>
+                <text class="col-payer">付款人</text>
+                <text class="col-total">总金额</text>
+                <text class="col-user">应付</text>
+                <text class="col-date">日期</text>
+              </view>
+              <view wx:for="{{selectedMemberBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}">
+                <text class="col-name">{{item.title}}</text>
+                <text class="col-payer">{{item.payer}}</text>
+                <text class="col-total">¥{{item.totalAmount}}</text>
+                <text class="col-user">¥{{item.userAmount}}</text>
+                <text class="col-date">{{item.date}}</text>
+              </view>
+            </view>
+          </view>
+          
+          <!-- 支出账单列表 -->
+          <view class="bill-section">
+            <view class="section-title">支出</view>
+            <view wx:if="{{selectedMemberPaidBills.length === 0}}" class="empty-tip">暂无支出账单</view>
+            <view wx:if="{{selectedMemberPaidBills.length > 0}}" class="bill-table">
+              <view class="bill-table-header">
+                <text class="col-name">名称</text>
+                <text class="col-payee">收款人</text>
+                <text class="col-total">总金额</text>
+                <text class="col-date">日期</text>
+              </view>
+              <view wx:for="{{selectedMemberPaidBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}">
+                <text class="col-name">{{item.title}}</text>
+                <text class="col-payee">{{item.payee}}</text>
+                <text class="col-total">¥{{item.totalAmount}}</text>
+                <text class="col-date">{{item.date}}</text>
+              </view>
+            </view>
+          </view>
+          <!-- 底部空行防止内容被裁切 -->
+          <view class="modal-spacer"></view>
+        </scroll-view>
+      </view>
+    </view>
 </view>
 
 

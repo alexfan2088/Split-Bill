@@ -16,8 +16,9 @@ Page({
     keeper: '', // 保管人员
     keeperList: [], // 保管人员列表（从成员中选择）
     creator: '', // 活动创建者
-    defaultTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 系统默认类型（不可删除）
-    commonTypes: ['聚餐', '秋秋妹', '四个朋友', '掼蛋', '公园'], // 常用类型（包含系统类型和自定义类型）
+    defaultTypes: ['聚餐', '秋秋妹', '麻将', '掼蛋', '公园'], // 系统默认类型（不可删除）
+    commonTypes: ['聚餐', '秋秋妹', '麻将', '掼蛋', '公园'], // 常用类型（包含系统类型和自定义类型）
+    remarkEditing: false, // 备注是否在编辑状态
   },
   
   async onLoad(options) {
@@ -25,8 +26,8 @@ Page({
     const userName = db.getCurrentUser();
     this.setData({ creator: userName });
     
-    // 加载常用类型列表（从本地存储）
-    this.loadCommonTypes();
+    // 加载常用类型列表（从数据库）
+    await this.loadCommonTypes();
     
     if (options.id && options.data) {
       // 编辑模式
@@ -67,6 +68,7 @@ Page({
           type: activity.type || '',
           membersText: memberNames.join('\n'),
           remark: activity.remark || '',
+          remarkEditing: true, // 编辑模式始终显示textarea
           isPrepaid: originalIsPrepaid,
           originalIsPrepaid: originalIsPrepaid, // 保存原始值
           showPrepaidOption: originalIsPrepaid, // 只有原始活动是打平伙时才显示
@@ -91,6 +93,16 @@ Page({
           membersText: userName
         });
       }
+      
+      // 自动填写备注说明
+      const defaultRemark = '默认方式：A B C 每次费用轮流付款，长期会平衡，也可以通过 结算 页面的余额信息，线下转账强制平衡后，补录账单实现账务清零，默认模式也可以用于人情账记账，例如小孩结婚，升学，吃席等。\n打平伙模式：A B C 提前转到A 那里，A 保管费用，每次费用A 来付款，费用结算页面可以看到当前余额，如果某一个人余额为负，则应自觉去A那里充值。';
+      this.setData({
+        remark: defaultRemark
+      });
+      
+      wx.setNavigationBarTitle({
+        title: '创建活动'
+      });
     }
   },
   
@@ -98,30 +110,51 @@ Page({
     this.setData({ name: e.detail.value });
   },
   
-  // 加载常用类型列表
-  loadCommonTypes() {
+  // 加载常用类型列表（从数据库）
+  async loadCommonTypes() {
     try {
-      const savedCustomTypes = wx.getStorageSync('aa_common_activity_types');
-      if (savedCustomTypes && Array.isArray(savedCustomTypes) && savedCustomTypes.length > 0) {
-        // 合并默认类型和保存的自定义类型，去重
-        const defaultTypes = this.data.defaultTypes;
-        const allTypes = [...new Set([...defaultTypes, ...savedCustomTypes])];
-        this.setData({ commonTypes: allTypes });
-      }
+      const dbCloud = wx.cloud.database();
+      // 查询当前用户的自定义活动类型
+      const res = await dbCloud.collection('userCustomActivityTypes')
+        .orderBy('createdAt', 'desc')
+        .get();
+      
+      const savedCustomTypes = (res.data || []).map(item => item.type);
+      
+      // 合并默认类型和保存的自定义类型，去重
+      const defaultTypes = this.data.defaultTypes;
+      const allTypes = [...new Set([...defaultTypes, ...savedCustomTypes])];
+      this.setData({ commonTypes: allTypes });
     } catch (e) {
       console.error('加载常用类型失败:', e);
+      // 如果查询失败，只使用默认类型
+      this.setData({ commonTypes: this.data.defaultTypes });
     }
   },
   
-  // 保存常用类型列表（只保存自定义类型）
-  saveCommonTypes() {
+  // 保存新类型到数据库（只保存自定义类型）
+  async saveCustomTypeToDB(newType) {
     try {
-      // 只保存自定义类型（排除系统默认类型）
-      const defaultTypes = this.data.defaultTypes;
-      const customTypes = this.data.commonTypes.filter(type => !defaultTypes.includes(type));
-      wx.setStorageSync('aa_common_activity_types', customTypes);
+      const dbCloud = wx.cloud.database();
+      // 检查该类型是否已存在
+      const checkRes = await dbCloud.collection('userCustomActivityTypes')
+        .where({ type: newType })
+        .get();
+      
+      if (checkRes.data && checkRes.data.length > 0) {
+        // 类型已存在，不需要重复保存
+        return;
+      }
+      
+      // 保存新类型到数据库
+      await dbCloud.collection('userCustomActivityTypes').add({
+        data: {
+          type: newType,
+          createdAt: new Date()
+        }
+      });
     } catch (e) {
-      console.error('保存常用类型失败:', e);
+      console.error('保存自定义类型到数据库失败:', e);
     }
   },
   
@@ -132,7 +165,7 @@ Page({
   },
   
   // 长按删除自定义类型
-  deleteType(e) {
+  async deleteType(e) {
     const typeToDelete = e.currentTarget.dataset.type;
     const defaultTypes = this.data.defaultTypes;
     
@@ -150,8 +183,30 @@ Page({
     wx.showModal({
       title: '确认删除',
       content: `确定要删除类型"${typeToDelete}"吗？`,
-      success: (res) => {
+      success: async (res) => {
         if (res.confirm) {
+          // 从数据库删除
+          try {
+            const dbCloud = wx.cloud.database();
+            const deleteRes = await dbCloud.collection('userCustomActivityTypes')
+              .where({ type: typeToDelete })
+              .get();
+            
+            if (deleteRes.data && deleteRes.data.length > 0) {
+              // 删除所有匹配的文档（理论上每个用户每种类型只有一个）
+              for (const doc of deleteRes.data) {
+                await dbCloud.collection('userCustomActivityTypes').doc(doc._id).remove();
+              }
+            }
+          } catch (e) {
+            console.error('从数据库删除类型失败:', e);
+            wx.showToast({
+              title: '删除失败',
+              icon: 'none'
+            });
+            return;
+          }
+          
           // 从常用类型列表中删除
           const updatedTypes = this.data.commonTypes.filter(type => type !== typeToDelete);
           this.setData({ commonTypes: updatedTypes });
@@ -160,9 +215,6 @@ Page({
           if (this.data.type === typeToDelete) {
             this.setData({ type: '' });
           }
-          
-          // 保存到本地存储
-          this.saveCommonTypes();
           
           wx.showToast({
             title: '已删除',
@@ -179,13 +231,18 @@ Page({
   },
   
   // 类型输入框失去焦点时，如果输入了新类型，自动添加到常用类型
-  onTypeBlur(e) {
+  async onTypeBlur(e) {
     const newType = e.detail.value.trim();
     if (newType && !this.data.commonTypes.includes(newType)) {
-      // 新类型，添加到常用类型列表
-      const updatedTypes = [...this.data.commonTypes, newType];
-      this.setData({ commonTypes: updatedTypes });
-      this.saveCommonTypes(); // 只保存自定义类型
+      // 检查是否是系统默认类型
+      const defaultTypes = this.data.defaultTypes;
+      if (!defaultTypes.includes(newType)) {
+        // 新类型，保存到数据库
+        await this.saveCustomTypeToDB(newType);
+        // 添加到常用类型列表
+        const updatedTypes = [...this.data.commonTypes, newType];
+        this.setData({ commonTypes: updatedTypes });
+      }
     }
   },
   
@@ -253,7 +310,15 @@ Page({
   },
   
   onRemarkInput(e) {
-    this.setData({ remark: e.detail.value });
+    this.setData({ 
+      remark: e.detail.value,
+      remarkEditing: true // 用户开始编辑，标记为编辑状态
+    });
+  },
+  
+  // 开始编辑备注
+  startEditRemark() {
+    this.setData({ remarkEditing: true });
   },
   
   // 切换打平伙选项
@@ -420,9 +485,15 @@ Page({
       
       // 如果输入了新类型，保存到常用类型列表
       if (type && !this.data.commonTypes.includes(type)) {
-        const updatedTypes = [...this.data.commonTypes, type];
-        this.setData({ commonTypes: updatedTypes });
-        this.saveCommonTypes(); // 只保存自定义类型
+        // 检查是否是系统默认类型
+        const defaultTypes = this.data.defaultTypes;
+        if (!defaultTypes.includes(type)) {
+          // 新类型，保存到数据库
+          await this.saveCustomTypeToDB(type);
+          // 添加到常用类型列表
+          const updatedTypes = [...this.data.commonTypes, type];
+          this.setData({ commonTypes: updatedTypes });
+        }
       }
       
       // 返回上一页

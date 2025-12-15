@@ -175,8 +175,8 @@
 }
 
 .circle {
-  width: 44.8rpx;
-  height: 44.8rpx;
+  width:54.8rpx; 
+  height: 54.8rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -199,12 +199,76 @@
   color: #d0d0d0;
 }
 
+/* 半蓝半绿的圆圈 */
+.circle.split {
+  background-color: transparent;
+  overflow: hidden;
+  box-shadow: 0 2rpx 4rpx rgba(0,0,0,0.2);
+}
+
+.circle-split {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.circle-half {
+  position: absolute;
+  width: 50%;
+  height: 100%;
+  top: 0;
+}
+
+.circle-half.circle-left {
+  left: 0;
+  border-radius: 50% 0 0 50%;
+}
+
+.circle-half.circle-right {
+  right: 0;
+  border-radius: 0 50% 50% 0;
+}
+
+.circle-split-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20rpx;
+  font-weight: bold;
+  color: white;
+  z-index: 10;
+  text-shadow: 0 1rpx 2rpx rgba(0,0,0,0.3);
+}
+
+/* 扇形图样式 */
+.circle.pie {
+  background-color: transparent;
+  overflow: hidden;
+  box-shadow: 0 2rpx 4rpx rgba(0,0,0,0.2);
+}
+
+.circle-pie {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.pie-canvas {
+  width: 54.8rpx;
+  height: 54.8rpx;
+}
+
 .bill-weight {
   width: 60rpx;
   font-size: 22rpx;
   color: #666;
   font-weight: 500;
-  margin-left: 16rpx;
+  margin-left: 32rpx; /* 再向右移一个字符（从24rpx增加到32rpx） */
 }
 
 .bill-info {
@@ -332,6 +396,273 @@
   padding: 24rpx;
   border-radius: 8rpx;
   margin-top: 30rpx;
+}
+
+/* 弹层 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal {
+  width: 680rpx;
+  max-height: 85vh;
+  background: #fff;
+  border-radius: 12rpx;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.modal-close {
+  font-size: 36rpx;
+  color: #999;
+}
+
+.modal-body {
+  padding: 20rpx 28rpx 80rpx;
+  max-height: 70vh;
+  box-sizing: border-box;
+}
+
+.modal-body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+.member-bill-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f5f5f5;
+}
+
+.member-bill-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-bill-title {
+  font-size: 28rpx;
+  color: #333;
+  line-height: 1.4;
+}
+
+.member-bill-date {
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 6rpx;
+}
+
+.member-bill-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.member-bill-amounts .total {
+  color: #333;
+}
+
+.member-bill-amounts .user {
+  color: #d48806;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+}
+
+.status-dot.green {
+  background: #28a745;
+}
+
+.status-dot.yellow {
+  background: #ffc107;
+}
+
+/* 汇总信息样式 */
+.summary-section {
+  background-color: #f8f9fa;
+  border-radius: 8rpx;
+  padding: 24rpx;
+  margin-bottom: 30rpx;
+  border: 1rpx solid #e0e0e0;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 0;
+  font-size: 28rpx;
+}
+
+.summary-row:last-child {
+  border-top: 2rpx solid #e0e0e0;
+  padding-top: 16rpx;
+  margin-top: 8rpx;
+}
+
+.summary-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.summary-value {
+  font-weight: bold;
+  font-size: 30rpx;
+}
+
+.summary-value.income {
+  color: #28a745;
+}
+
+.summary-value.expense {
+  color: #007bff;
+}
+
+.summary-value.balance.positive {
+  color: #28a745;
+}
+
+.summary-value.balance.negative {
+  color: #dc3545;
+}
+
+/* 账单表格样式 */
+.bill-section {
+  margin-bottom: 40rpx;
+}
+
+.bill-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+  padding-bottom: 12rpx;
+  border-bottom: 2rpx solid #e0e0e0;
+}
+
+.bill-table {
+  width: 100%;
+  border: 1rpx solid #e0e0e0;
+  border-radius: 8rpx;
+  overflow: hidden;
+}
+
+.bill-table-header {
+  display: flex;
+  padding: 16rpx 0;
+  background-color: #f5f5f5;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #666;
+  text-align: center;
+}
+
+.bill-table-row {
+  display: flex;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+  align-items: center;
+  font-size: 24rpx;
+  color: #333;
+  text-align: center;
+}
+
+.bill-table-row:last-child {
+  border-bottom: none;
+  padding-bottom: 20rpx; /* 最后一行增加底部padding，确保完整显示 */
+}
+
+.modal-spacer {
+  height: 40rpx;
+}
+
+.bill-table-header .col-name,
+.bill-table-row .col-name {
+  flex: 2;
+  text-align: left;
+  padding-left: 16rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill-table-header .col-payer,
+.bill-table-row .col-payer {
+  flex: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill-table-header .col-payee,
+.bill-table-row .col-payee {
+  flex: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill-table-header .col-total,
+.bill-table-row .col-total {
+  flex: 1.2;
+  color: #137333;
+  font-weight: 500;
+}
+
+.bill-table-header .col-user,
+.bill-table-row .col-user {
+  flex: 1.2;
+  color: #007bff;
+  font-weight: 500;
+}
+
+.bill-table-header .col-date,
+.bill-table-row .col-date {
+  flex: 1.5;
+  color: #999;
+  font-size: 22rpx;
+}
+
+.bill-table-header .col-status,
+.bill-table-row .col-status {
+  flex: 0.8;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .suggestion-title {
@@ -529,5 +860,169 @@
   color: #856404;
   font-weight: 500;
 }
+
+/* 成员账单弹窗样式 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  width: 90%;
+  max-height: 100vh;
+  background-color: white;
+  border-radius: 16rpx;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 30rpx;
+  border-bottom: 2rpx solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.modal-close {
+  font-size: 48rpx;
+  color: #999;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-body {
+  flex: 1;
+  padding: 30rpx 30rpx 80rpx 30rpx; /* 增加底部padding，确保最后一行完整显示 */
+}
+
+/* 隐藏滚动条但保持滚动功能 */
+.modal-body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+.bill-section {
+  margin-bottom: 40rpx;
+}
+
+.bill-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+  padding-bottom: 12rpx;
+  border-bottom: 2rpx solid #e0e0e0;
+}
+
+.bill-table {
+  width: 100%;
+}
+
+.bill-table-header {
+  display: flex;
+  padding: 16rpx 0;
+  background-color: #f5f5f5;
+  border-radius: 8rpx 8rpx 0 0;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #666;
+  text-align: center;
+}
+
+.bill-table-row {
+  display: flex;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+  align-items: center;
+  font-size: 24rpx;
+  color: #333;
+  text-align: center;
+}
+
+.bill-table-row:last-child {
+  border-bottom: none;
+  padding-bottom: 20rpx; /* 最后一行增加底部padding，确保完整显示 */
+}
+
+.bill-table-header .col-name,
+.bill-table-row .col-name {
+  flex: 2;
+  text-align: left;
+  padding-left: 16rpx;
+}
+
+.bill-table-header .col-payer,
+.bill-table-row .col-payer {
+  flex: 1.5;
+}
+
+.bill-table-header .col-payee,
+.bill-table-row .col-payee {
+  flex: 2;
+}
+
+.bill-table-header .col-total,
+.bill-table-row .col-total {
+  flex: 1.2;
+  color: #137333;
+  font-weight: 500;
+}
+
+.bill-table-header .col-user,
+.bill-table-row .col-user {
+  flex: 1.2;
+  color: #007bff;
+  font-weight: 500;
+}
+
+.bill-table-header .col-date,
+.bill-table-row .col-date {
+  flex: 1.5;
+  color: #999;
+  font-size: 22rpx;
+}
+
+.bill-table-header .col-status,
+.bill-table-row .col-status {
+  flex: 0.8;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.status-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.green {
+  background-color: #28a745;
+}
+
+.status-dot.yellow {
+  background-color: #ffc107;
+}
+
 
 

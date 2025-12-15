@@ -27,7 +27,13 @@
         <text class="status-text {{statusTextColor}}">{{statusText}}</text>
       </view>
       
-      <button class="btn btn-full" bindtap="handleLoginOrRegister">登录/注册</button>
+      <button class="btn btn-full" bindtap="handleLoginOrRegister">{{isRegisterMode ? '注册' : '登录'}}</button>
+      
+      <view class="form-item" style="margin-top: 20rpx; text-align: center;">
+        <text class="link-text" bindtap="{{isRegisterMode ? 'switchToLogin' : 'switchToRegister'}}">
+          {{isRegisterMode ? '已有账号？去登录' : '没有账号？去注册'}}
+        </text>
+      </view>
     </view>
   </view>
 </view>

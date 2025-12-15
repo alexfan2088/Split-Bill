@@ -21,6 +21,14 @@ Page({
     totalRecharge: 0, // 充值总金额
     totalConsume: 0, // 消费总金额
     remaining: 0, // 剩余金额
+    rawBills: [], // 原始账单数据，含分摊详情
+    showMemberBills: false,
+    selectedMemberBills: [], // 用户应付账单列表（收入）
+    selectedMemberPaidBills: [], // 用户实付账单列表（支出）
+    selectedMemberName: '',
+    selectedMemberIncome: '0.00', // 收入总额
+    selectedMemberExpense: '0.00', // 支出总额
+    selectedMemberBalance: '0.00', // 余额
   },
   
   onLoad(options) {
@@ -88,13 +96,13 @@ Page({
       const userName = db.getCurrentUser();
       const isActivityCreator = activity.creator === userName;
       
-      const processedBills = bills.map(bill => {
+      const processedBills = bills.map((bill, billIndex) => {
         const circles = this.generateCircles(bill);
         const totalCount = this.calculateTotalCount(bill);
         const date = this.formatBillDate(bill);
         const isBillCreator = bill.creator === userName;
         // 金额格式化为2位小数
-        const amount = Number(bill.amount || 0).toFixed(2);
+        const amount = this.formatAmount(bill.amount || 0);
         
         console.log(`账单 ${bill.title} - participants:`, bill.participants);
         console.log(`账单 ${bill.title} - totalCount:`, totalCount);
@@ -106,8 +114,16 @@ Page({
           date,
           isCreator: isBillCreator,
           amount, // 格式化的金额字符串
+          billIndex, // 添加索引用于 canvas ID
         };
       });
+      
+      // 等待 DOM 更新后绘制 canvas
+      this.$nextTick ? this.$nextTick(() => {
+        this.drawPieCharts(processedBills);
+      }) : setTimeout(() => {
+        this.drawPieCharts(processedBills);
+      }, 100);
       
       // 计算余额
       // 如果是打平伙活动，需要传入充值数据
@@ -190,9 +206,9 @@ Page({
         return {
           name: m.name,
           bal: {
-            paid: bal.paid.toFixed(2),
-            shouldPay: bal.shouldPay.toFixed(2),
-            balance: bal.balance.toFixed(2)
+            paid: this.formatAmount(bal.paid),
+            shouldPay: this.formatAmount(bal.shouldPay),
+            balance: this.formatAmount(bal.balance)
           }
         };
       });
@@ -335,9 +351,10 @@ Page({
         activity,
         activityMeta,
         bills: processedBills,
+        rawBills: bills, // 保存原始账单数据
         members,
-        total: total.toFixed(2),
-        avg: avg.toFixed(2),
+        total: this.formatAmount(total),
+        avg: this.formatAmount(avg),
         dateRange,
         suggestionMember,
         isCreator: isActivityCreator, // 保存是否是活动创建者
@@ -346,13 +363,13 @@ Page({
         recharges: recharges.map(r => ({
           ...r,
           date: this.formatRechargeDate(r),
-          amount: Number(r.amount || 0).toFixed(2),
+          amount: this.formatAmount(r.amount || 0),
           recorder: r.recorder || r.creator, // 记录人，如果没有recorder字段则使用creator
           isCreator: r.creator === db.getCurrentUser(),
         })),
-        totalRecharge: totalRecharge.toFixed(2),
-        totalConsume: totalConsume.toFixed(2),
-        remaining: remaining.toFixed(2),
+        totalRecharge: this.formatAmount(totalRecharge),
+        totalConsume: this.formatAmount(totalConsume),
+        remaining: this.formatAmount(remaining),
       });
       
       // 保存到全局数据
@@ -374,107 +391,125 @@ Page({
   // 生成圆圈数据
   generateCircles(bill) {
     const circles = [];
-    if (!bill.participants) {
-      // 没有参与成员，显示3个虚线圆
-      for (let i = 0; i < 3; i++) {
-        circles.push({
-          type: 'dashed',
-          marginLeft: i === 0 ? '0' : '-7px',
-        });
-      }
-      return circles;
-    }
     
-    // 获取所有权重大于0的成员名称
-    const membersWithWeight = Object.keys(bill.participants).filter(name => {
+    // 获取付款人和记录人
+    const payer = bill.payer || '';
+    const recorder = bill.recorder || bill.creator || '';
+    
+    // 获取所有权重大于0的参与人员
+    const participantsWithWeight = bill.participants ? Object.keys(bill.participants).filter(name => {
       const weight = bill.participants[name] || 0;
       return weight > 0;
-    });
+    }) : [];
     
-    const maxDisplay = 3;
+    // 定义颜色数组（用于第三个圆的扇形）
+    const colors = [
+      '#FF6B6B', // 红色
+      '#4ECDC4', // 青色
+      '#45B7D1', // 蓝色
+      '#FFA07A', // 浅橙色
+      '#98D8C8', // 薄荷绿
+      '#F7DC6F', // 黄色
+      '#BB8FCE', // 紫色
+      '#85C1E2', // 浅蓝色
+      '#F8B88B', // 浅粉色
+      '#82E0AA', // 浅绿色
+    ];
     
-    // 如果超过3个人，确保付款人必须显示，其他随机选择
-    if (membersWithWeight.length > maxDisplay) {
-      const payer = bill.payer;
-      let displayMembers = [];
+    // 第一个圆：付款人（蓝色）
+    if (payer) {
+      const payerSurname = payer.charAt(0);
+      circles.push({
+        type: 'solid',
+        surname: payerSurname,
+        color: '#007bff', // 蓝色
+        marginLeft: '0',
+      });
+    } else {
+      // 如果没有付款人，用虚线圆
+      circles.push({
+        type: 'dashed',
+        marginLeft: '0',
+      });
+    }
+    
+    // 第二个圆：记录人（绿色）
+    if (recorder) {
+      const recorderSurname = recorder.charAt(0);
+      circles.push({
+        type: 'solid',
+        surname: recorderSurname,
+        color: '#28a745', // 绿色
+        marginLeft: '-7px',
+      });
+    } else {
+      // 如果没有记录人，用虚线圆
+      circles.push({
+        type: 'dashed',
+        marginLeft: '-7px',
+      });
+    }
+    
+    // 第三个圆：彩色扇形图（根据参与人权重分配）
+    if (participantsWithWeight.length > 0) {
+      // 计算总权重
+      const totalWeight = participantsWithWeight.reduce((sum, name) => {
+        return sum + (bill.participants[name] || 0);
+      }, 0);
       
-      // 如果付款人权重大于0，确保付款人在列表中
-      if (payer && membersWithWeight.includes(payer)) {
-        displayMembers.push(payer);
-        // 从剩余成员中随机选择2个
-        const remainingMembers = membersWithWeight.filter(name => name !== payer);
-        // 随机打乱并取前2个
-        const shuffled = remainingMembers.sort(() => Math.random() - 0.5);
-        displayMembers = displayMembers.concat(shuffled.slice(0, 2));
-      } else {
-        // 如果付款人不在权重大于0的列表中，随机选择3个
-        const shuffled = membersWithWeight.sort(() => Math.random() - 0.5);
-        displayMembers = shuffled.slice(0, maxDisplay);
-      }
-      
-      // 生成圆圈（按姓氏显示）
-      for (let i = 0; i < maxDisplay; i++) {
-        if (i < displayMembers.length) {
-          const memberName = displayMembers[i];
-          const surname = memberName.charAt(0);
-          const isPayer = memberName === payer;
-          const color = isPayer ? '#007bff' : '#D4A574';
+      if (totalWeight > 0) {
+        // 生成扇形数据
+        const sectors = [];
+        let currentAngle = 0; // 当前角度（从0度开始）
+        
+        let currentAngleRad = 0; // 当前弧度（从0开始）
+        
+        participantsWithWeight.forEach((name, index) => {
+          const weight = bill.participants[name] || 0;
+          const proportion = weight / totalWeight; // 占比
+          const angleRad = proportion * 2 * Math.PI; // 弧度角
           
-          circles.push({
-            type: 'solid',
-            surname: surname,
-            color: color,
-            marginLeft: i === 0 ? '0' : '-7px',
+          sectors.push({
+            name: name,
+            surname: name.charAt(0),
+            weight: weight,
+            proportion: proportion, // 占比
+            startAngleRad: currentAngleRad, // 起始弧度
+            endAngleRad: currentAngleRad + angleRad, // 结束弧度
+            angleRad: angleRad, // 弧度大小
+            color: colors[index % colors.length], // 分配颜色
           });
-        } else {
-          // 虚线圆
-          circles.push({
-            type: 'dashed',
-            marginLeft: i === 0 ? '0' : '-7px',
-          });
+          
+          currentAngleRad += angleRad; // 更新当前弧度
+        });
+        
+        // 确保最后一个扇形的结束角度正好是 2π，避免间隙
+        if (sectors.length > 0) {
+          const lastSector = sectors[sectors.length - 1];
+          // 重新计算总弧度，确保精确到 2π
+          const calculatedTotal = sectors.slice(0, -1).reduce((sum, s) => sum + s.angleRad, 0);
+          lastSector.angleRad = 2 * Math.PI - calculatedTotal; // 最后一个扇形填充剩余弧度
+          lastSector.endAngleRad = 2 * Math.PI;
         }
+        
+        circles.push({
+          type: 'pie', // 扇形图类型
+          sectors: sectors, // 扇形数据
+          marginLeft: '-7px',
+        });
+      } else {
+        // 如果总权重为0，用虚线圆
+        circles.push({
+          type: 'dashed',
+          marginLeft: '-7px',
+        });
       }
     } else {
-      // 如果不超过3个人，按原来的逻辑（按姓氏分组显示）
-      // 按姓氏分组统计
-      const surnameMap = {};
-      Object.keys(bill.participants).forEach(name => {
-        const weight = bill.participants[name] || 0;
-        if (weight > 0) {
-          const surname = name.charAt(0);
-          if (!surnameMap[surname]) {
-            surnameMap[surname] = 0;
-          }
-          surnameMap[surname] += weight;
-        }
+      // 如果没有参与人员，用虚线圆
+      circles.push({
+        type: 'dashed',
+        marginLeft: '-7px',
       });
-      
-      const surnames = Object.keys(surnameMap);
-      const displayedSurnames = surnames.slice(0, maxDisplay);
-      
-      // 生成圆圈
-      for (let i = 0; i < maxDisplay; i++) {
-        if (i < displayedSurnames.length) {
-          const surname = displayedSurnames[i];
-          const hasPayer = Object.keys(bill.participants).some(name => 
-            name.charAt(0) === surname && bill.participants[name] > 0 && bill.payer === name
-          );
-          const color = hasPayer ? '#007bff' : '#D4A574';
-          
-          circles.push({
-            type: 'solid',
-            surname: surname,
-            color: color,
-            marginLeft: i === 0 ? '0' : '-7px',
-          });
-        } else {
-          // 虚线圆
-          circles.push({
-            type: 'dashed',
-            marginLeft: i === 0 ? '0' : '-7px',
-          });
-        }
-      }
     }
     
     return circles;
@@ -491,6 +526,16 @@ Page({
       }
     });
     return total;
+  },
+  
+  // 格式化金额（>=1000保留到个位数，<1000保留一位小数）
+  formatAmount(amount) {
+    const num = Number(amount || 0);
+    if (num >= 1000) {
+      return num.toFixed(0);
+    } else {
+      return num.toFixed(1);
+    }
   },
   
   // 格式化账单日期
@@ -564,6 +609,103 @@ Page({
     return map;
   },
   
+  // 点击成员，展示该成员应付和实付账单列表
+  onMemberTap(e) {
+    const memberName = e.currentTarget.dataset.name;
+    if (!memberName) return;
+    const rawBills = this.data.rawBills || [];
+    
+    // 用户应付的账单列表（该用户参与的账单）
+    const memberBills = rawBills
+      .filter(b => b && b.splitDetail && b.participants && b.participants[memberName] !== undefined && b.participants[memberName] > 0 && b.splitDetail[memberName] !== undefined)
+      .map(b => {
+        return {
+          _id: b._id,
+          creator: b.creator,
+          title: b.title || '未命名',
+          payer: b.payer || '未知',
+          totalAmount: this.formatAmount(b.amount || 0),
+          userAmount: this.formatAmount(b.splitDetail[memberName] || 0),
+          date: this.formatBillDate(b),
+          paid: b.payer === memberName, // 付款人为本人视为已付
+        };
+      });
+    
+    // 用户实付的账单列表（该用户付款的账单）
+    const memberPaidBills = rawBills
+      .filter(b => b && b.payer === memberName)
+      .map(b => {
+        // 计算收款人（所有参与人中，除了付款人自己）
+        const participants = b.participants ? Object.keys(b.participants).filter(name => 
+          name !== memberName && b.participants[name] > 0
+        ) : [];
+        const payee = participants.length > 0 ? participants.join('、') : '无';
+        
+        return {
+          _id: b._id,
+          creator: b.creator,
+          title: b.title || '未命名',
+          payee: payee,
+          totalAmount: this.formatAmount(b.amount || 0),
+          date: this.formatBillDate(b),
+        };
+      });
+    
+    // 计算收入总额（用户应付金额的总和）
+    const incomeTotal = memberBills.reduce((sum, bill) => sum + Number(bill.userAmount || 0), 0);
+    
+    // 计算支出总额（用户付款的账单总金额）
+    const expenseTotal = memberPaidBills.reduce((sum, bill) => sum + Number(bill.totalAmount || 0), 0);
+    
+    // 计算余额（支出 - 收入）
+    const balance = expenseTotal - incomeTotal;
+
+    this.setData({
+      selectedMemberBills: memberBills,
+      selectedMemberPaidBills: memberPaidBills,
+      selectedMemberName: memberName,
+      selectedMemberIncome: this.formatAmount(incomeTotal), // 收入总额
+      selectedMemberExpense: this.formatAmount(expenseTotal), // 支出总额
+      selectedMemberBalance: this.formatAmount(balance), // 余额
+      showMemberBills: true,
+    });
+  },
+
+  // 关闭成员账单列表
+  closeMemberBills() {
+    this.setData({
+      showMemberBills: false,
+      selectedMemberBills: [],
+      selectedMemberPaidBills: [],
+      selectedMemberName: '',
+      selectedMemberIncome: '0.00',
+      selectedMemberExpense: '0.00',
+      selectedMemberBalance: '0.00',
+    });
+  },
+
+  // 从弹窗跳转到原始账单
+  openBillFromModal(e) {
+    const billId = e.currentTarget.dataset.id;
+    if (!billId) return;
+
+    const bill = (this.data.rawBills || []).find(b => b._id === billId);
+    if (!bill) {
+      wx.showToast({
+        title: '未找到账单',
+        icon: 'none'
+      });
+      return;
+    }
+
+    const userName = db.getCurrentUser();
+    const isCreator = bill.creator === userName;
+
+    wx.navigateTo({
+      url: `/pages/bill/edit?activityId=${this.data.activityId}&billId=${bill._id}&readOnly=${!isCreator}`
+    });
+  },
+  
   // 计算日期范围
   calculateDateRange(bills) {
     if (bills.length === 0) return '至今';
@@ -603,8 +745,8 @@ Page({
         minBalance = bal.balance;
         minBalanceMember = {
           name: name,
-          shouldPay: bal.shouldPay.toFixed(2),
-          paid: bal.paid.toFixed(2),
+          shouldPay: this.formatAmount(bal.shouldPay),
+          paid: this.formatAmount(bal.paid),
         };
       }
     });
@@ -615,6 +757,14 @@ Page({
   switchTab(e) {
     const tab = e.currentTarget.dataset.tab;
     this.setData({ currentTab: tab });
+    
+    // 如果切换到账单页面，需要重新绘制饼图
+    if (tab === 'bills' && this.data.bills && this.data.bills.length > 0) {
+      // 延迟绘制，等待DOM更新
+      setTimeout(() => {
+        this.drawPieCharts(this.data.bills);
+      }, 200);
+    }
   },
   
   addBill() {
@@ -668,6 +818,107 @@ Page({
     });
   },
   
+  // 绘制扇形图
+  async drawPieCharts(bills) {
+    const pieBills = bills.filter(bill => {
+      const pieCircle = bill.circles && bill.circles.find(c => c.type === 'pie');
+      return pieCircle && pieCircle.sectors && pieCircle.sectors.length > 0;
+    });
+
+    for (const bill of pieBills) {
+      const pieCircle = bill.circles.find(c => c.type === 'pie');
+      if (!pieCircle || !pieCircle.sectors) continue;
+
+      try {
+        const query = wx.createSelectorQuery().in(this);
+        const canvasNode = await new Promise((resolve, reject) => {
+          query.select(`#pieCanvas_${bill._id}`)
+            .fields({ node: true, size: true })
+            .exec((res) => {
+              if (res[0] && res[0].node) {
+                resolve(res[0]);
+              } else {
+                reject(new Error('Canvas not found'));
+              }
+            });
+        });
+
+        const canvas = canvasNode.node;
+        const ctx = canvas.getContext('2d');
+        const dpr = wx.getSystemInfoSync().pixelRatio;
+        const width = canvasNode.width || 54.8;
+        const height = canvasNode.height || 54.8;
+
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) / 2;
+
+        // 绘制每个扇形
+        pieCircle.sectors.forEach((sector) => {
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          
+          // 起始点（从顶部开始，所以减去 π/2）
+          const startX = centerX + radius * Math.cos(sector.startAngleRad - Math.PI / 2);
+          const startY = centerY + radius * Math.sin(sector.startAngleRad - Math.PI / 2);
+          ctx.lineTo(startX, startY);
+          
+          // 绘制弧线
+          ctx.arc(centerX, centerY, radius, sector.startAngleRad - Math.PI / 2, sector.endAngleRad - Math.PI / 2, false);
+          
+          // 闭合路径
+          ctx.closePath();
+          
+          // 填充颜色
+          ctx.fillStyle = sector.color;
+          ctx.fill();
+          
+          // 在扇形中心位置绘制姓氏
+          // 如果只有一个扇形（整个圆），文字放在圆心
+          let textX, textY;
+          let fontSize;
+          
+          if (pieCircle.sectors.length === 1) {
+            // 单个参与人：文字放在圆心
+            textX = centerX;
+            textY = centerY;
+            // 字体大小：20rpx 转换为 px（假设 1rpx = 0.5px，实际需要根据设备调整）
+            fontSize = 10; // 约等于 20rpx
+          } else {
+            // 多个参与人：文字放在扇形中心
+            // 计算扇形的中心角度
+            const centerAngleRad = (sector.startAngleRad + sector.endAngleRad) / 2 - Math.PI / 2;
+            // 计算文字位置（在半径的中间位置）
+            const textRadius = radius * 0.5; // 在半径的50%位置
+            textX = centerX + textRadius * Math.cos(centerAngleRad);
+            textY = centerY + textRadius * Math.sin(centerAngleRad);
+            
+            // 根据扇形角度调整字体大小（角度越大，字体越大）
+            // 最小字体：6px，最大字体：10px（不超过蓝色和绿色圆的20rpx）
+            const minFontSize = 6;
+            const maxFontSize = 10;
+            fontSize = minFontSize + (sector.angleRad / (2 * Math.PI)) * (maxFontSize - minFontSize);
+          }
+          
+          // 绘制文字
+          ctx.save();
+          ctx.fillStyle = '#fff'; // 白色文字
+          ctx.font = `bold ${fontSize}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(sector.surname, textX, textY);
+          ctx.restore();
+        });
+      } catch (e) {
+        console.error('绘制扇形图失败:', e);
+      }
+    }
+  },
+
   editActivity() {
     // 只有创建者才能编辑活动
     if (!this.data.isCreator) {
@@ -677,13 +928,13 @@ Page({
       });
       return;
     }
-    
+
     // 准备活动数据
     const activityData = {
       ...this.data.activity,
       memberNames: this.data.activity.members ? this.data.activity.members.map(m => typeof m === 'string' ? m : m.name) : []
     };
-    
+
     wx.navigateTo({
       url: `/pages/activity/create?id=${this.data.activityId}&data=${encodeURIComponent(JSON.stringify(activityData))}`
     });
@@ -702,6 +953,26 @@ Page({
     const payer = e.currentTarget.dataset.payer;
     const amount = e.currentTarget.dataset.amount;
     
+    // 检查权限
+    const userName = db.getCurrentUser();
+    const recharge = this.data.recharges.find(r => r._id === rechargeId);
+    if (!recharge) {
+      wx.showToast({
+        title: '找不到充值记录',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    const isCreator = recharge.creator === userName;
+    if (!isCreator) {
+      wx.showToast({
+        title: '只有创建者可以删除',
+        icon: 'none'
+      });
+      return;
+    }
+    
     wx.showModal({
       title: '确认删除',
       content: `确定要删除充值记录（${payer}，¥${amount}）吗？此操作不可恢复！`,
@@ -709,8 +980,13 @@ Page({
         if (res.confirm) {
           wx.showLoading({ title: '删除中...' });
           try {
+            console.log('🗑️ 开始删除充值记录，rechargeId:', rechargeId);
+            console.log('当前用户:', userName, '创建者:', recharge.creator);
+            
             const dbCloud = wx.cloud.database();
             await dbCloud.collection('recharges').doc(rechargeId).remove();
+            
+            console.log('✅ 删除成功');
             wx.hideLoading();
             wx.showToast({
               title: '删除成功',
@@ -718,10 +994,22 @@ Page({
             });
             this.loadActivityData();
           } catch (e) {
+            console.error('❌ 删除失败:', e);
+            console.error('错误码:', e.errCode, '错误信息:', e.errMsg);
             wx.hideLoading();
+            
+            // 根据错误类型显示不同的提示
+            let errorMsg = '删除失败';
+            if (e.errCode === -601034 || (e.errMsg && e.errMsg.includes('权限'))) {
+              errorMsg = '删除失败：数据库权限不足，请检查recharges集合的删除权限设置';
+            } else if (e.errMsg) {
+              errorMsg = `删除失败：${e.errMsg}`;
+            }
+            
             wx.showToast({
-              title: '删除失败',
-              icon: 'none'
+              title: errorMsg,
+              icon: 'none',
+              duration: 3000
             });
           }
         }

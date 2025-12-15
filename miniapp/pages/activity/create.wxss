@@ -47,16 +47,54 @@
   box-sizing: border-box; /* 包含padding和border */
 }
 
-/* 成员输入框：保持原来的高度 */
+/* 成员输入框：6行高度，超过自动滚动 */
 .textarea-members {
-  height: 400rpx; /* 原来的高度 */
-  min-height: 400rpx;
+  height: 240rpx; /* 6行高度（每行约40rpx） */
+  min-height: 240rpx;
+  max-height: 240rpx; /* 固定高度，超过时滚动 */
+  overflow-y: auto; /* 超过高度时显示滚动条 */
 }
 
-/* 备注框：较小的高度 */
-.textarea:not(.textarea-members) {
-  height: 100rpx; /* 固定高度，两行 */
-  min-height: 100rpx; /* 最小高度 */
+/* 备注框：自动高度，不限制 */
+.textarea-remark {
+  min-height: 200rpx; /* 最小高度 */
+  height: auto; /* 自动高度 */
+}
+
+/* 备注显示区域（格式化显示） */
+.remark-display {
+  width: 100%;
+  padding: 20rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 8rpx;
+  background-color: #f9f9f9;
+  min-height: 200rpx;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.remark-text {
+  font-size: 28rpx;
+  line-height: 1.8;
+  color: #333;
+  white-space: pre-wrap; /* 保留换行 */
+  word-wrap: break-word;
+}
+
+.remark-highlight {
+  color: #007bff;
+  font-weight: bold;
+}
+
+.remark-edit-hint {
+  position: absolute;
+  bottom: 10rpx;
+  right: 20rpx;
+  font-size: 24rpx;
+  color: #999;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 4rpx 12rpx;
+  border-radius: 4rpx;
 }
 
 .input:focus,

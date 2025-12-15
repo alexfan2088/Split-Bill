@@ -7,6 +7,16 @@
     </view>
     
     <view class="form-item">
+      <text class="label">账单类型</text>
+      <view class="type-tags">
+        <view wx:for="{{commonTypes}}" wx:key="*this" class="type-tag {{billType === item ? 'active' : ''}}" bindtap="selectBillType" data-type="{{item}}">
+          {{item}}
+        </view>
+      </view>
+      <input class="input" type="text" placeholder="或输入自定义类型" value="{{billType}}" bindinput="onBillTypeInput" bindblur="onBillTypeBlur" maxlength="10" disabled="{{isReadOnly}}" />
+    </view>
+    
+    <view class="form-item">
       <text class="label">账单名称</text>
       <input class="input" type="text" placeholder="例如：晚餐、山姆购物" value="{{title}}" bindinput="onTitleInput" maxlength="7" disabled="{{isReadOnly}}" />
       <text class="hint">最多7个汉字</text>

@@ -93,4 +93,16 @@
   font-weight: bold;
 }
 
+.status-text.orange {
+  color: #ff9800;
+  font-weight: bold;
+}
+
+.link-text {
+  color: #007bff;
+  font-size: 26rpx;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 

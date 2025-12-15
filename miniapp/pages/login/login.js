@@ -15,16 +15,18 @@ Page({
     statusTextColor: '',
     passwordErrorCount: {}, // 记录每个用户名的密码错误次数
     lastUserName: '', // 记录上次输入的用户名
+    isRegisterMode: false, // false: 登录模式, true: 注册模式
+    hasSavedUser: false, // 是否有保存的用户信息
   },
   
   onLoad() {
-    // 检查是否已登录
+    // 检查是否已保存用户信息
     const userName = wx.getStorageSync('aa_user_name');
     const savedPasswordHashed = wx.getStorageSync('aa_user_password');
     const savedPasswordPlain = wx.getStorageSync('aa_user_password_plain');
     
     if (userName && savedPasswordHashed) {
-      // 有保存的用户名和密码，自动填充（但不自动登录，需要用户点击登录按钮）
+      // 有保存的用户名和密码，进入登录模式
       const realPwd = savedPasswordPlain || '';
       console.log('加载保存的密码 - realPwd:', realPwd ? '有密码' : '无密码');
       this.setData({ 
@@ -34,13 +36,56 @@ Page({
         showPassword: true,
         showConfirmPassword: false,
         showPasswordText: false, // 默认显示星号
-        statusText: '已保存用户信息，点击"登录/注册"即可快速登录',
+        isRegisterMode: false, // 登录模式
+        hasSavedUser: true,
+        statusText: '已保存用户信息，请输入密码登录',
         statusTextColor: 'blue'
       });
-    } else if (userName) {
-      // 只有用户名，填充用户名
-      this.setData({ userName });
+    } else {
+      // 没有保存的用户信息，进入注册模式
+      this.setData({
+        isRegisterMode: true,
+        hasSavedUser: false,
+        showPassword: true,
+        showConfirmPassword: true,
+        statusText: '首次使用，请注册新账号',
+        statusTextColor: 'orange'
+      });
     }
+  },
+  
+  // 切换到注册模式
+  switchToRegister() {
+    this.setData({
+      isRegisterMode: true,
+      userName: '',
+      password: '',
+      realPassword: '',
+      confirmPassword: '',
+      showPassword: true,
+      showConfirmPassword: true,
+      showPasswordText: false,
+      statusText: '注册新账号',
+      statusTextColor: 'orange'
+    });
+  },
+  
+  // 切换到登录模式
+  switchToLogin() {
+    const userName = wx.getStorageSync('aa_user_name');
+    const savedPasswordPlain = wx.getStorageSync('aa_user_password_plain');
+    
+    this.setData({
+      isRegisterMode: false,
+      userName: userName || '',
+      password: savedPasswordPlain ? '******' : '',
+      realPassword: savedPasswordPlain || '',
+      showPassword: true,
+      showConfirmPassword: false,
+      showPasswordText: false,
+      statusText: userName ? '请输入密码登录' : '请输入用户名和密码登录',
+      statusTextColor: 'blue'
+    });
   },
   
   onUserNameInput(e) {
@@ -99,7 +144,238 @@ Page({
     });
   },
   
-  async handleLoginOrRegister() {
+  // 处理登录
+  async handleLogin() {
+    const userName = this.data.userName.trim();
+    const password = this.data.realPassword || this.data.password;
+    
+    if (!userName) {
+      wx.showToast({
+        title: '请输入用户名',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    if (!password) {
+      wx.showToast({
+        title: '请输入密码',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    wx.showLoading({
+      title: '登录中...'
+    });
+    
+    try {
+      const result = await db.login(userName, password);
+      wx.hideLoading();
+      
+      if (result.success) {
+        // 重置错误计数
+        const passwordErrorCount = { ...this.data.passwordErrorCount };
+        passwordErrorCount[userName] = 0;
+        this.setData({ passwordErrorCount });
+        
+        // 更新全局数据
+        app.globalData.currentUserName = userName;
+        
+        wx.showToast({
+          title: '登录成功',
+          icon: 'success'
+        });
+        
+        // 跳转到首页
+        setTimeout(() => {
+          wx.redirectTo({
+            url: '/pages/home/home'
+          });
+        }, 1500);
+      } else {
+        // 密码错误
+        const passwordErrorCount = { ...this.data.passwordErrorCount };
+        if (!passwordErrorCount[userName]) {
+          passwordErrorCount[userName] = 0;
+        }
+        passwordErrorCount[userName]++;
+        
+        const errorCount = passwordErrorCount[userName];
+        this.setData({ passwordErrorCount });
+        
+        if (errorCount >= 3) {
+          wx.showModal({
+            title: '提示',
+            content: `密码错误3次。该用户名可能已被他人使用，请更换用户名后重新注册`,
+            showCancel: false,
+            confirmText: '确定',
+            success: () => {
+              passwordErrorCount[userName] = 0;
+              this.setData({
+                passwordErrorCount,
+                password: '',
+                realPassword: '',
+                statusText: '密码错误3次，请检查用户名是否正确',
+                statusTextColor: 'red'
+              });
+            }
+          });
+        } else {
+          const remaining = 3 - errorCount;
+          wx.showToast({
+            title: `密码错误，还可尝试 ${remaining} 次`,
+            icon: 'none',
+            duration: 2000
+          });
+          this.setData({
+            password: '',
+            realPassword: '',
+            statusText: `密码错误，还可尝试 ${remaining} 次`,
+            statusTextColor: 'red'
+          });
+        }
+      }
+    } catch (e) {
+      wx.hideLoading();
+      console.error('登录失败:', e);
+      wx.showToast({
+        title: '登录失败，请重试',
+        icon: 'none'
+      });
+    }
+  },
+  
+  // 处理注册
+  async handleRegister() {
+    const userName = this.data.userName.trim();
+    const password = this.data.password;
+    const confirmPassword = this.data.confirmPassword;
+    
+    if (!userName) {
+      wx.showToast({
+        title: '请输入用户名',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    // 先检查用户是否已存在
+    wx.showLoading({
+      title: '检查中...'
+    });
+    
+    try {
+      const dbCloud = wx.cloud.database();
+      const userRes = await dbCloud.collection('users')
+        .where({ name: userName })
+        .limit(1)
+        .get();
+      
+      wx.hideLoading();
+      
+      if (userRes.data && userRes.data.length > 0) {
+        // 用户已存在，提示登录
+        wx.showModal({
+          title: '提示',
+          content: '该用户名已注册，请使用登录功能',
+          showCancel: false,
+          confirmText: '去登录',
+          success: () => {
+            this.switchToLogin();
+            this.setData({
+              statusText: '该用户名已注册，请输入密码登录',
+              statusTextColor: 'blue'
+            });
+          }
+        });
+        return;
+      }
+      
+      // 用户不存在，继续注册流程
+      if (!password) {
+        wx.showToast({
+          title: '请设置密码（至少6位）',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      if (password.length < 6) {
+        wx.showToast({
+          title: '密码长度至少6位',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      if (!confirmPassword) {
+        wx.showToast({
+          title: '请确认密码',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      if (password !== confirmPassword) {
+        wx.showToast({
+          title: '两次输入的密码不一致',
+          icon: 'none'
+        });
+        this.setData({ confirmPassword: '' });
+        return;
+      }
+      
+      wx.showLoading({
+        title: '注册中...'
+      });
+      
+      const result = await db.register(userName, password, confirmPassword);
+      wx.hideLoading();
+      
+      if (result.success) {
+        // 更新全局数据
+        app.globalData.currentUserName = userName;
+        
+        wx.showToast({
+          title: '注册成功',
+          icon: 'success'
+        });
+        
+        // 跳转到首页
+        setTimeout(() => {
+          wx.redirectTo({
+            url: '/pages/home/home'
+          });
+        }, 1500);
+      } else {
+        wx.showToast({
+          title: result.error || '注册失败',
+          icon: 'none',
+          duration: 2000
+        });
+      }
+    } catch (e) {
+      wx.hideLoading();
+      console.error('注册失败:', e);
+      wx.showToast({
+        title: '注册失败，请重试',
+        icon: 'none'
+      });
+    }
+  },
+  
+  // 统一处理按钮点击（根据模式调用不同函数）
+  handleLoginOrRegister() {
+    if (this.data.isRegisterMode) {
+      this.handleRegister();
+    } else {
+      this.handleLogin();
+    }
+  },
+  
+  // 旧的handleLoginOrRegister函数（已废弃，保留以防万一）
+  async handleLoginOrRegisterOld() {
     const userName = this.data.userName.trim();
     // 使用真实密码进行登录/注册
     const password = this.data.realPassword || this.data.password;

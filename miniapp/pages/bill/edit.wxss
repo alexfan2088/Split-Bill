@@ -104,4 +104,28 @@
   color: #666;
 }
 
+.type-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.type-tag {
+  padding: 12rpx 24rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  color: #666;
+  background-color: #f9f9f9;
+  transition: all 0.3s;
+}
+
+.type-tag.active {
+  border-color: #007bff;
+  background-color: #e7f3ff;
+  color: #007bff;
+  font-weight: 500;
+}
+
 

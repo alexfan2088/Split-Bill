@@ -10,6 +10,7 @@ Page({
     isReadOnly: false,
     amount: '',
     title: '',
+    billType: '聚餐', // 账单类型
     date: '',
     time: '',
     payerIndex: 0,
@@ -19,10 +20,15 @@ Page({
     isPrepaid: false, // 是否打平伙活动
     keeper: '', // 保管人员
     payerDisabled: false, // 付款人是否禁用
+    defaultTypes: ['聚餐', '人情账', '麻将', '门票', '礼品', '衣服'], // 系统默认类型
+    commonTypes: ['聚餐', '人情账', '麻将', '门票', '礼品', '衣服'], // 常用类型（包含系统类型和自定义类型）
   },
   
-  onLoad(options) {
+  async onLoad(options) {
     this.setData({ activityId: options.activityId || '' });
+    
+    // 加载常用账单类型列表（从数据库）
+    await this.loadCommonTypes();
     
     // 检查是否是只读模式
     const isReadOnly = options.readOnly === 'true';
@@ -47,6 +53,54 @@ Page({
       wx.setNavigationBarTitle({
         title: '账单详情'
       });
+    }
+  },
+  
+  // 加载常用类型列表（从数据库）
+  async loadCommonTypes() {
+    try {
+      const dbCloud = wx.cloud.database();
+      // 查询当前用户的自定义账单类型
+      const res = await dbCloud.collection('userCustomBillTypes')
+        .orderBy('createdAt', 'desc')
+        .get();
+      
+      const savedTypes = (res.data || []).map(item => item.type);
+      
+      // 合并默认类型和保存的类型，去重
+      const defaultTypes = this.data.defaultTypes;
+      const allTypes = [...new Set([...defaultTypes, ...savedTypes])];
+      this.setData({ commonTypes: allTypes });
+    } catch (e) {
+      console.error('加载常用类型失败:', e);
+      // 如果查询失败，只使用默认类型
+      this.setData({ commonTypes: this.data.defaultTypes });
+    }
+  },
+  
+  // 保存新类型到数据库（只保存自定义类型）
+  async saveCustomTypeToDB(newType) {
+    try {
+      const dbCloud = wx.cloud.database();
+      // 检查该类型是否已存在
+      const checkRes = await dbCloud.collection('userCustomBillTypes')
+        .where({ type: newType })
+        .get();
+      
+      if (checkRes.data && checkRes.data.length > 0) {
+        // 类型已存在，不需要重复保存
+        return;
+      }
+      
+      // 保存新类型到数据库
+      await dbCloud.collection('userCustomBillTypes').add({
+        data: {
+          type: newType,
+          createdAt: new Date()
+        }
+      });
+    } catch (e) {
+      console.error('保存自定义类型到数据库失败:', e);
     }
   },
   
@@ -146,6 +200,7 @@ Page({
       const activityId = this.data.activityId;
       
       // 查询最近一次账单
+      let lastBill = null;
       let lastBillParticipants = null;
       try {
         const lastBillRes = await dbCloud.collection('bills')
@@ -153,9 +208,22 @@ Page({
           .orderBy('createdAt', 'desc')
           .limit(1)
           .get();
-        
+
         if (lastBillRes.data && lastBillRes.data.length > 0) {
-          lastBillParticipants = lastBillRes.data[0].participants || null;
+          lastBill = lastBillRes.data[0];
+          lastBillParticipants = lastBill.participants || null;
+          
+          // 继承最近一次账单的名称和类型
+          if (lastBill.title) {
+            this.setData({ title: lastBill.title });
+          }
+          // 继承最近一次账单的类型，如果没有则保持默认值"聚餐"
+          if (lastBill.billType) {
+            this.setData({ billType: lastBill.billType });
+          } else {
+            // 如果最近一次账单没有类型，保持默认值"聚餐"
+            this.setData({ billType: '聚餐' });
+          }
         }
       } catch (e) {
         console.log('查询最近一次账单失败（可能没有索引）:', e);
@@ -266,6 +334,7 @@ Page({
       this.setData({
         amount: String(bill.amount || ''),
         title: bill.title || '',
+        billType: bill.billType || '聚餐', // 加载账单类型
         date: `${year}-${month}-${day}`,
         time: `${hours}:${minutes}`,
         payerIndex: payerIndex,
@@ -306,6 +375,33 @@ Page({
       return;
     }
     this.setData({ title });
+  },
+  
+  // 选择账单类型
+  selectBillType(e) {
+    const selectedType = e.currentTarget.dataset.type;
+    this.setData({ billType: selectedType });
+  },
+  
+  // 账单类型输入框失去焦点时，如果输入了新类型，自动添加到常用类型
+  async onBillTypeBlur(e) {
+    const newType = e.detail.value.trim();
+    if (newType && !this.data.commonTypes.includes(newType)) {
+      // 检查是否是系统默认类型
+      const defaultTypes = this.data.defaultTypes;
+      if (!defaultTypes.includes(newType)) {
+        // 新类型，保存到数据库
+        await this.saveCustomTypeToDB(newType);
+        // 添加到常用类型列表
+        const updatedTypes = [...this.data.commonTypes, newType];
+        this.setData({ commonTypes: updatedTypes });
+      }
+    }
+  },
+  
+  // 账单类型输入
+  onBillTypeInput(e) {
+    this.setData({ billType: e.detail.value });
   },
   
   onDateChange(e) {
@@ -364,6 +460,7 @@ Page({
     }
     
     const title = this.data.title.trim() || '未命名';
+    const billType = this.data.billType.trim() || '聚餐';
     const payer = this.data.payerList[this.data.payerIndex].name;
     const remark = this.data.remark.trim();
     
@@ -383,44 +480,31 @@ Page({
     console.log('当前活动成员:', currentMemberNames);
     console.log('准备保存的participants:', participants);
     
-    // 检查付款人的权重是否大于0
-    const payerWeight = participants[payer] || 0;
-    if (payerWeight <= 0) {
+    // 计算分摊金额
+    // 计算总权重（包括权重为0的成员）
+    const totalWeight = Object.keys(participants).reduce((sum, name) => sum + (participants[name] || 0), 0);
+    
+    // 验证：参与人权重和必须大于0（针对默认模式和打平伙模式）
+    if (totalWeight === 0) {
       wx.showModal({
         title: '提示',
-        content: '付款人的权重必须大于0，请修改后重试。',
+        content: '参与人权重和必须大于0，请至少设置一个参与人的权重大于0',
         showCancel: false,
         confirmText: '确定',
         success: () => {
-          // 对话框关闭后，焦点会自动回到页面
+          // 用户确认后，不保存，返回让用户修改权重
         }
       });
-      return;
+      return; // 阻止保存
     }
     
-    // 检查是否有权重大于0的成员
-    const namesWithWeight = Object.keys(participants).filter(name => participants[name] > 0);
-    if (namesWithWeight.length === 0) {
-      wx.showToast({
-        title: '至少添加一个参与成员（权重大于0）',
-        icon: 'none'
-      });
-      return;
-    }
-    
-    // 计算分摊金额（与Web版本保持一致）
-    // 为所有成员设置 splitDetail，权重为0的成员金额为0
-    const totalWeight = namesWithWeight.reduce((sum, name) => sum + participants[name], 0);
     const splitDetail = {};
+    
+    // 如果总权重大于0，按权重比例计算
     Object.keys(participants).forEach(name => {
-      if (participants[name] > 0 && totalWeight > 0) {
-        // 权重大于0的成员：按权重比例计算
-        const share = amount * participants[name] / totalWeight;
-        splitDetail[name] = Number(share.toFixed(2));
-      } else {
-        // 权重为0的成员：金额为0
-        splitDetail[name] = 0;
-      }
+      const weight = participants[name] || 0;
+      const share = amount * weight / totalWeight;
+      splitDetail[name] = Number(share.toFixed(1));
     });
     
     // 组合时间（使用iOS兼容格式）
@@ -465,6 +549,7 @@ Page({
         activityId: this.data.activityId,
         amount,
         title,
+        billType: billType, // 保存账单类型
         payer,
         participants: cleanParticipants, // 使用清理后的participants
         splitDetail: cleanSplitDetail, // 使用清理后的splitDetail
@@ -499,6 +584,7 @@ Page({
           activityId: billData.activityId,
           amount: billData.amount,
           title: billData.title,
+          billType: billData.billType, // 保存账单类型
           payer: billData.payer,
           participants: billData.participants, // 只包含当前活动成员，完全替换旧对象
           splitDetail: billData.splitDetail,   // 只包含当前活动成员，完全替换旧对象
