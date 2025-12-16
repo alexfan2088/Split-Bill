@@ -520,11 +520,11 @@
 <script>
   // ====== 日志系统（仅输出到控制台） ======
   function appLog(message, type = 'info') {
-    const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-    const consoleMethod = type === 'error' ? 'error' : 
-                         type === 'warning' ? 'warn' : 
-                         type === 'success' ? 'log' : 'log';
-    console[consoleMethod](`[${timestamp}] ${message}`);
+      const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const consoleMethod = type === 'error' ? 'error' : 
+                           type === 'warning' ? 'warn' : 
+                           type === 'success' ? 'log' : 'log';
+      console[consoleMethod](`[${timestamp}] ${message}`);
   }
 
   // ====== CloudBase 初始化 ======
@@ -2206,7 +2206,7 @@
     };
     modal.addEventListener('click', newBgHandler);
   }
-
+  
   // ====== 自定义确认对话框 ======
   function showConfirmDialog(message, onConfirm) {
     const modal = document.getElementById('confirmDeleteModal');
@@ -2426,35 +2426,35 @@
           if (i < displayedSurnames.length) {
             // 有实际姓氏的圆
             const surname = displayedSurnames[i];
-            // 检查这个姓氏对应的所有成员中是否有付款人
-            const hasPayer = Object.keys(b.participants).some(name => 
-              getSurname(name) === surname && b.participants[name] > 0 && b.payer === name
-            );
-            // 如果有付款人，用蓝色；否则用土黄色
-            const color = hasPayer ? '#007bff' : '#D4A574'; // 蓝色或土黄色
-            
+          // 检查这个姓氏对应的所有成员中是否有付款人
+          const hasPayer = Object.keys(b.participants).some(name => 
+            getSurname(name) === surname && b.participants[name] > 0 && b.payer === name
+          );
+          // 如果有付款人，用蓝色；否则用土黄色
+          const color = hasPayer ? '#007bff' : '#D4A574'; // 蓝色或土黄色
+          
             // 第一个圆不重叠，后续圆重叠30%（22.4px * 0.3 ≈ 6.7px，用-7px）
             const marginLeft = i === 0 ? '0' : '-7px';
-            
+          
             circles.push(`
-              <span style="
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
+            <span style="
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
                 width: 22.4px;
                 height: 22.4px;
-                border-radius: 50%;
-                background-color: ${color};
-                color: white;
-                font-weight: bold;
+              border-radius: 50%;
+              background-color: ${color};
+              color: white;
+              font-weight: bold;
                 font-size: 10px;
-                margin-left: ${marginLeft};
+              margin-left: ${marginLeft};
                 border: 1.4px solid white;
                 box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-                position: relative;
+              position: relative;
                 z-index: ${10 - i};
-                flex-shrink: 0;
-              ">${surname}</span>
+              flex-shrink: 0;
+            ">${surname}</span>
             `);
           } else {
             // 虚线圆（浅灰色）
@@ -2556,18 +2556,18 @@
         <div class="row" style="align-items: center;">
           <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;">
             <div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 2px; cursor: pointer; flex-shrink: 0; width: ${circlesContainerWidth}; justify-content: flex-start;" onclick="${clickHandler}">
-              ${participantsHtml}
-            </div>
+                ${participantsHtml}
+              </div>
             <div style="display: flex; align-items: center; flex-shrink: 0; width: ${weightSumWidth}; justify-content: flex-start; font-size: 11px; color: #666; font-weight: 500; margin-left: 8px;">
               ${b.participants ? totalCount : '0'}
             </div>
             <div style="flex: 1; cursor: pointer; min-width: 0; margin-left: -11px;" onclick="${clickHandler}">
               <div style="font-size: 11px; color: #333; line-height: 1.3;">
                 ${billTitle}
-              </div>
+            </div>
               <div style="font-size: 10px; color: #999; line-height: 1.3; margin-top: 2px;">
                 ${billDate}
-              </div>
+          </div>
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
@@ -2946,7 +2946,7 @@
     m.style.display = 'flex';
     updateBackButton(); // 隐藏返回按钮
   }
-  
+
   // ====== 编辑费用 ======
   async function editBill(billDoc) {
     // 权限检查：只有记录的创建者才能编辑
@@ -2974,8 +2974,8 @@
     if (!billId) {
       appLog('编辑费用失败：无法获取费用ID', 'error');
       showGlobalMessage('无法获取费用ID', 'error');
-      return;
-    }
+        return;
+      }
     
     if (!currentActivity || !db) {
       showGlobalMessage('数据未初始化', 'error');
@@ -3091,14 +3091,14 @@
     if (time) {
       const timeInput = document.getElementById('billTime');
       if (timeInput) {
-        const d = (time.toDate) ? time.toDate() : new Date(time);
-        const local = new Date(d.getTime() - d.getTimezoneOffset()*60000)
-                        .toISOString().slice(0,16);
+      const d = (time.toDate) ? time.toDate() : new Date(time);
+      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000)
+                      .toISOString().slice(0,16);
         timeInput.value = local;
         appLog('已填充时间: ' + local, 'info');
       } else {
         appLog('错误：找不到 billTime 输入框', 'error');
-      }
+    }
     } else {
       appLog('警告：没有时间数据', 'warning');
     }
@@ -3166,7 +3166,7 @@
       }
       appLog(`编辑费用 - 调用 addBillParticipantRow(${memberName}, ${weight})`, 'info');
       addBillParticipantRow(container, memberName, weight);
-    });
+      });
     appLog('参与成员行创建完成', 'info');
     
     // 保存费用ID用于更新
@@ -3264,7 +3264,7 @@
         return;
       }
       
-      const name = nameInput.value.trim();
+        const name = nameInput.value.trim();
       if (!name) {
         appLog('跳过：名字为空', 'warning');
         return; // 跳过没有名字的行
@@ -3446,9 +3446,9 @@
                   payer,
                   participants: cleanParticipants, // 使用清理后的 participants
                   splitDetail: splitDetailClean, // 使用重新计算的 splitDetail
-                  time: timeStr ? new Date(timeStr) : new Date(),
-                  remark,
-                  updatedAt: new Date()
+          time: timeStr ? new Date(timeStr) : new Date(),
+          remark,
+          updatedAt: new Date()
                 };
                 // 移除 _id 和 _openid，这些是系统字段，不应该在 set 时包含
                 delete mergedData._id;

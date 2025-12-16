@@ -2,13 +2,13 @@
 <view class="container">
   <view class="header">
     <view class="activity-header">
-      <view class="activity-title-row">
-        <view class="activity-title">
-          {{activity.name}}
-          <text wx:if="{{isPrepaid}}" class="prepaid-tag">（打平伙）</text>
+        <view class="activity-title-row">
+          <view class="activity-title">
+            {{activity.name}}
+            <text wx:if="{{isPrepaid}}" class="prepaid-tag">（打平伙）</text>
+          </view>
+          <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
         </view>
-        <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
-      </view>
       <view class="activity-creator" wx:if="{{activity.creator}}">
         <text>创建者：<text class="creator-name">{{activity.creator}}</text></text>
         <text wx:if="{{isPrepaid && keeper}}" class="keeper-info">保管者：<text class="keeper-name">{{keeper}}</text></text>
@@ -28,10 +28,11 @@
     </view>
   </view>
   
-  <view class="tabs">
+      <view class="tabs">
     <view class="tab {{currentTab === 'bills' ? 'active' : ''}}" bindtap="switchTab" data-tab="bills">账单</view>
     <view wx:if="{{isPrepaid}}" class="tab {{currentTab === 'recharge' ? 'active' : ''}}" bindtap="switchTab" data-tab="recharge">打平伙</view>
     <view class="tab {{currentTab === 'summary' ? 'active' : ''}}" bindtap="switchTab" data-tab="summary">结算</view>
+    <button class="btn-add-inline" bindtap="addBill">+ 添加账单</button>
   </view>
   
   <!-- 账单 Tab -->
@@ -63,7 +64,6 @@
         </view>
       </view>
     </view>
-    <button class="btn-add" bindtap="addBill">+ 添加账单</button>
   </view>
   
   <!-- 打平伙 Tab -->
@@ -161,11 +161,11 @@
           <!-- 汇总信息 -->
           <view class="summary-section">
             <view class="summary-row">
-              <text class="summary-label">收入：</text>
+              <text class="summary-label">{{selectedMemberName}}收入：</text>
               <text class="summary-value income">¥{{selectedMemberIncome}}</text>
             </view>
             <view class="summary-row">
-              <text class="summary-label">支出：</text>
+              <text class="summary-label">{{selectedMemberName}}支出：</text>
               <text class="summary-value expense">¥{{selectedMemberExpense}}</text>
             </view>
             <view class="summary-row">
@@ -176,8 +176,8 @@
           
           <!-- 收入账单列表 -->
           <view class="bill-section">
-            <view class="section-title">收入</view>
-            <view wx:if="{{selectedMemberBills.length === 0}}" class="empty-tip">暂无收入账单</view>
+            <view class="section-title">{{selectedMemberName}}收入</view>
+            <view wx:if="{{selectedMemberBills.length === 0}}" class="empty-tip">暂无{{selectedMemberName}}收入账单</view>
             <view wx:if="{{selectedMemberBills.length > 0}}" class="bill-table">
               <view class="bill-table-header">
                 <text class="col-name">名称</text>
@@ -198,8 +198,8 @@
           
           <!-- 支出账单列表 -->
           <view class="bill-section">
-            <view class="section-title">支出</view>
-            <view wx:if="{{selectedMemberPaidBills.length === 0}}" class="empty-tip">暂无支出账单</view>
+            <view class="section-title">{{selectedMemberName}}支出</view>
+            <view wx:if="{{selectedMemberPaidBills.length === 0}}" class="empty-tip">暂无{{selectedMemberName}}支出账单</view>
             <view wx:if="{{selectedMemberPaidBills.length > 0}}" class="bill-table">
               <view class="bill-table-header">
                 <text class="col-name">名称</text>

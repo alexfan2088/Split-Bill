@@ -115,8 +115,10 @@
 
 .tabs {
   display: flex;
+  align-items: center;
   background-color: white;
   border-bottom: 2rpx solid #e0e0e0;
+  position: relative;
 }
 
 .tab {
@@ -315,6 +317,19 @@
   border-radius: 8rpx;
   font-size: 28rpx;
   text-align: center;
+}
+
+.btn-add-inline {
+  margin-left: auto;
+  margin-right: 20rpx;
+  background-color: #007bff;
+  color: white;
+  padding: 12rpx 24rpx;
+  border-radius: 6rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  border: none;
+  height: auto;
 }
 
 .summary-content {

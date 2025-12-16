@@ -705,7 +705,7 @@ Page({
       url: `/pages/bill/edit?activityId=${this.data.activityId}&billId=${bill._id}&readOnly=${!isCreator}`
     });
   },
-  
+
   // 计算日期范围
   calculateDateRange(bills) {
     if (bills.length === 0) return '至今';
