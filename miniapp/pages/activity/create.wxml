@@ -26,7 +26,7 @@
       <text class="label">备注</text>
       <!-- 显示模式：格式化显示默认备注 -->
       <view wx:if="{{!remarkEditing && !isEdit && remark}}" class="remark-display" bindtap="startEditRemark">
-        <text class="remark-text"><text class="remark-highlight">默认方式</text>：A B C 每次费用轮流付款，长期会平衡，也可以通过 结算 ，线下转账强制平衡。\n<text class="remark-highlight">打平伙模式</text>：A B C 提前转到A 那里，A 保管费用，每次费用A 来付款，费用结算页面可以看到当前余额，如果某一个人余额为负，则应自觉去A那里充值。</text>
+        <text class="remark-text"><text class="remark-highlight">默认方式</text>：A B C 每次费用轮流付款，长期会平衡，也可以通过 结算 ，线下转账强制平衡。\n<text class="remark-highlight">预存模式</text>：A B C 提前转到A 那里，A 保管费用，每次费用A 来付款，费用结算页面可以看到当前余额，如果某一个人余额为负，则应自觉去A那里充值。</text>
         <text class="remark-edit-hint">点击编辑</text>
       </view>
       <!-- 编辑模式：使用textarea -->
@@ -35,10 +35,10 @@
     
     <view wx:if="{{showPrepaidOption}}" class="form-item">
       <view class="switch-item">
-        <text class="switch-label">打平伙</text>
+        <text class="switch-label">预存</text>
         <switch checked="{{isPrepaid}}" bindchange="togglePrepaid" disabled="{{isEdit && originalIsPrepaid}}" />
       </view>
-      <view wx:if="{{isEdit && originalIsPrepaid}}" class="switch-hint">创建时已选择打平伙，不可修改</view>
+      <view wx:if="{{isEdit && originalIsPrepaid}}" class="switch-hint">创建时已选择预存，不可修改</view>
     </view>
     
     <view wx:if="{{isPrepaid}}" class="form-item">

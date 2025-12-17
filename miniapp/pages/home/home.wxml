@@ -21,7 +21,7 @@
       <view class="activity-header">
         <view class="activity-name">
           {{item.name}}
-          <text wx:if="{{item.isPrepaid}}" class="prepaid-tag">（打平伙）</text>
+          <text wx:if="{{item.isPrepaid}}" class="prepaid-tag">（预存）</text>
         </view>
         <button wx:if="{{item.isCreator}}" class="btn-delete" size="mini" catchtap="deleteActivity" data-id="{{item._id}}" data-name="{{item.name}}">删除</button>
       </view>

@@ -10,9 +10,9 @@ Page({
     type: '',
     membersText: '',
     remark: '',
-    isPrepaid: false, // 是否打平伙
-    originalIsPrepaid: false, // 原始活动的打平伙状态（用于编辑时判断）
-    showPrepaidOption: true, // 是否显示打平伙选项
+    isPrepaid: false, // 是否预存
+    originalIsPrepaid: false, // 原始活动的预存状态（用于编辑时判断）
+    showPrepaidOption: true, // 是否显示预存选项
     keeper: '', // 保管人员
     keeperList: [], // 保管人员列表（从成员中选择）
     creator: '', // 活动创建者
@@ -71,7 +71,7 @@ Page({
           remarkEditing: true, // 编辑模式始终显示textarea
           isPrepaid: originalIsPrepaid,
           originalIsPrepaid: originalIsPrepaid, // 保存原始值
-          showPrepaidOption: originalIsPrepaid, // 只有原始活动是打平伙时才显示
+          showPrepaidOption: originalIsPrepaid, // 只有原始活动是预存时才显示
           keeper: activity.keeper || '',
           keeperList: memberNames.map(name => ({ name })),
           creator: creator,
@@ -95,7 +95,7 @@ Page({
       }
       
       // 自动填写备注说明
-      const defaultRemark = '默认方式：A B C 每次费用轮流付款，长期会平衡，也可以通过 结算 页面的余额信息，线下转账强制平衡后，补录账单实现账务清零，默认模式也可以用于人情账记账，例如小孩结婚，升学，吃席等。\n打平伙模式：A B C 提前转到A 那里，A 保管费用，每次费用A 来付款，费用结算页面可以看到当前余额，如果某一个人余额为负，则应自觉去A那里充值。';
+      const defaultRemark = '默认方式：A B C 每次费用轮流付款，长期会平衡，也可以通过 结算 页面的余额信息，线下转账强制平衡后，补录账单实现账务清零，默认模式也可以用于人情账记账，例如小孩结婚，升学，吃席等。\n预存模式：A B C 提前转到A 那里，A 保管费用，每次费用A 来付款，费用结算页面可以看到当前余额，如果某一个人余额为负，则应自觉去A那里充值。';
       this.setData({
         remark: defaultRemark
       });
@@ -285,7 +285,7 @@ Page({
           const newLines = [creator, ...cleanLines];
           this.setData({ membersText: newLines.join('\n') });
           
-          // 如果已经选择了打平伙，同步更新保管人员列表
+          // 如果已经选择了预存，同步更新保管人员列表
           if (this.data.isPrepaid) {
             this.setData({
               keeperList: newLines.map(name => ({ name }))
@@ -298,7 +298,7 @@ Page({
     
     this.setData({ membersText: inputValue });
     
-    // 如果已经选择了打平伙，同步更新保管人员列表
+    // 如果已经选择了预存，同步更新保管人员列表
     if (this.data.isPrepaid) {
       const memberNames = inputValue.split('\n')
         .map(line => line.trim())
@@ -321,16 +321,16 @@ Page({
     this.setData({ remarkEditing: true });
   },
   
-  // 切换打平伙选项
+  // 切换预存选项
   togglePrepaid(e) {
-    // 如果是编辑模式且原始活动是打平伙，不允许修改
+    // 如果是编辑模式且原始活动是预存，不允许修改
     if (this.data.isEdit && this.data.originalIsPrepaid) {
       return;
     }
     const isPrepaid = e.detail.value;
     this.setData({ isPrepaid });
     
-    // 如果选择打平伙，初始化保管人员列表
+    // 如果选择预存，初始化保管人员列表
     if (isPrepaid && this.data.membersText) {
       const memberNames = this.data.membersText.split('\n')
         .map(line => line.trim())
@@ -417,7 +417,7 @@ Page({
           memberNames,
           updatedAt: new Date()
         };
-        // 如果是打平伙活动，保存保管人员
+        // 如果是预存活动，保存保管人员
         if (this.data.isPrepaid) {
           updateData.keeper = this.data.keeper;
         }
@@ -458,7 +458,7 @@ Page({
           creator: userName,
           createdAt: new Date()
         };
-        // 如果是打平伙活动，保存保管人员
+        // 如果是预存活动，保存保管人员
         if (this.data.isPrepaid) {
           createData.keeper = this.data.keeper;
         }

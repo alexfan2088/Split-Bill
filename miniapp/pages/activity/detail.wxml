@@ -5,7 +5,7 @@
         <view class="activity-title-row">
           <view class="activity-title">
             {{activity.name}}
-            <text wx:if="{{isPrepaid}}" class="prepaid-tag">（打平伙）</text>
+            <text wx:if="{{isPrepaid}}" class="prepaid-tag">（预存）</text>
           </view>
           <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
         </view>
@@ -30,9 +30,9 @@
   
       <view class="tabs">
     <view class="tab {{currentTab === 'bills' ? 'active' : ''}}" bindtap="switchTab" data-tab="bills">账单</view>
-    <view wx:if="{{isPrepaid}}" class="tab {{currentTab === 'recharge' ? 'active' : ''}}" bindtap="switchTab" data-tab="recharge">打平伙</view>
+    <view wx:if="{{isPrepaid}}" class="tab {{currentTab === 'recharge' ? 'active' : ''}}" bindtap="switchTab" data-tab="recharge">预存</view>
     <view class="tab {{currentTab === 'summary' ? 'active' : ''}}" bindtap="switchTab" data-tab="summary">结算</view>
-    <button class="btn-add-inline" bindtap="addBill">+ 添加账单</button>
+    <button class="btn-add-inline" bindtap="addBill">+账单</button>
   </view>
   
   <!-- 账单 Tab -->
@@ -66,7 +66,7 @@
     </view>
   </view>
   
-  <!-- 打平伙 Tab -->
+  <!-- 预存 Tab -->
   <view wx:if="{{currentTab === 'recharge' && isPrepaid}}" class="tab-content">
     <view class="recharge-content">
       <view class="recharge-summary">
@@ -108,7 +108,7 @@
   <!-- 结算 Tab -->
   <view wx:if="{{currentTab === 'summary'}}" class="tab-content">
     <view class="summary-content">
-      <!-- 打平伙活动的特殊显示 -->
+      <!-- 预存活动的特殊显示 -->
       <view wx:if="{{isPrepaid}}" class="prepaid-summary">
         <view class="prepaid-item">
           <text class="prepaid-label">总金额（充值）：</text>

@@ -17,7 +17,7 @@ Page({
     payerList: [],
     participants: [],
     remark: '',
-    isPrepaid: false, // 是否打平伙活动
+    isPrepaid: false, // 是否预存活动
     keeper: '', // 保管人员
     payerDisabled: false, // 付款人是否禁用
     defaultTypes: ['聚餐', '人情账', '麻将', '门票', '礼品', '衣服'], // 系统默认类型
@@ -136,21 +136,22 @@ Page({
         name: typeof m === 'string' ? m : m.name
       }));
       
-      // 检查是否是打平伙活动
+      // 检查是否是预存活动
       const isPrepaid = activity ? (activity.isPrepaid || false) : false;
       const keeper = activity ? (activity.keeper || '') : '';
       
-      // 如果是打平伙活动，付款人默认为保管人员，且不可更改
+      // 如果是预存活动，付款人默认为保管人员，但允许用户修改
       let payerIndex = 0;
       let payerDisabled = false;
       if (isPrepaid && keeper) {
         const keeperIndex = payerList.findIndex(p => p.name === keeper);
         if (keeperIndex >= 0) {
           payerIndex = keeperIndex;
-          payerDisabled = true;
+          // 预存模式下允许选择其他人员，不禁用
+          payerDisabled = false;
         }
       } else {
-        // 如果不是打平伙活动，设置默认付款人为当前用户
+        // 如果不是预存活动，设置默认付款人为当前用户
         if (!this.data.isEdit && payerList.length > 0) {
           const userName = db.getCurrentUser();
           const defaultPayerIndex = payerList.findIndex(p => p.name === userName);
@@ -306,7 +307,7 @@ Page({
         return { name, weight };
       });
       
-      // 加载活动信息，检查是否是打平伙活动
+      // 加载活动信息，检查是否是预存活动
       const actRes = await dbCloud.collection('activities').doc(this.data.activityId).get();
       const activity = actRes.data;
       const isPrepaid = activity ? (activity.isPrepaid || false) : false;
@@ -316,15 +317,23 @@ Page({
       let payerIndex = 0;
       let payerDisabled = false;
       
-      // 如果是打平伙活动，付款人固定为保管人员
+      // 如果是预存活动，默认付款人为保管人员，但允许修改
       if (isPrepaid && keeper) {
         const keeperIndex = this.data.payerList.findIndex(p => p.name === keeper);
         if (keeperIndex >= 0) {
-          payerIndex = keeperIndex;
-          payerDisabled = true;
+          // 编辑模式下，如果账单中的付款人不是保管人，使用账单中的付款人
+          // 否则使用保管人作为默认值
+          const billPayerIndex = this.data.payerList.findIndex(p => p.name === bill.payer);
+          if (billPayerIndex >= 0) {
+            payerIndex = billPayerIndex;
+          } else {
+            payerIndex = keeperIndex;
+          }
+          // 预存模式下允许选择其他人员，不禁用
+          payerDisabled = false;
         }
       } else {
-        // 如果不是打平伙活动，使用账单中的付款人
+        // 如果不是预存活动，使用账单中的付款人
         payerIndex = this.data.payerList.findIndex(p => p.name === bill.payer);
         if (payerIndex < 0) {
           payerIndex = 0;
@@ -413,10 +422,7 @@ Page({
   },
   
   onPayerChange(e) {
-    // 如果是打平伙活动，不允许更改付款人
-    if (this.data.payerDisabled) {
-      return;
-    }
+    // 预存模式下允许选择其他人员，保存时会自动处理
     this.setData({ payerIndex: e.detail.value });
   },
   
@@ -461,8 +467,17 @@ Page({
     
     const title = this.data.title.trim() || '未命名';
     const billType = this.data.billType.trim() || '聚餐';
-    const payer = this.data.payerList[this.data.payerIndex].name;
+    let payer = this.data.payerList[this.data.payerIndex].name;
     const remark = this.data.remark.trim();
+    
+    // 预存模式特殊处理：如果付款人不是保管人，需要创建充值记录
+    let needCreateRecharge = false;
+    let originalPayer = null;
+    if (this.data.isPrepaid && this.data.keeper && payer !== this.data.keeper) {
+      originalPayer = payer;
+      payer = this.data.keeper; // 修改付款人为保管人员
+      needCreateRecharge = true;
+    }
     
     // 收集参与成员权重（与Web版本保持一致）
     // 确保所有成员都保存（包括权重为0的），以便编辑时能正确显示
@@ -484,7 +499,7 @@ Page({
     // 计算总权重（包括权重为0的成员）
     const totalWeight = Object.keys(participants).reduce((sum, name) => sum + (participants[name] || 0), 0);
     
-    // 验证：参与人权重和必须大于0（针对默认模式和打平伙模式）
+    // 验证：参与人权重和必须大于0（针对默认模式和预存模式）
     if (totalWeight === 0) {
       wx.showModal({
         title: '提示',
@@ -633,19 +648,54 @@ Page({
         });
       } else {
         // 创建账单
-        await dbCloud.collection('bills').add({
+        const billResult = await dbCloud.collection('bills').add({
           data: {
             ...billData,
+            payer: payer, // 使用修改后的付款人（如果是预存模式且付款人不是保管人，已修改为保管人）
             creator: userName,
             createdAt: new Date(),
           }
         });
         
-        wx.hideLoading();
-        wx.showToast({
-          title: '保存成功',
-          icon: 'success'
-        });
+        // 如果是预存模式且付款人不是保管人，创建充值记录
+        if (needCreateRecharge && originalPayer && this.data.keeper) {
+          const dateStr = this.data.date; // 格式：yyyy-MM-dd
+          const date = new Date(`${dateStr}T00:00:00`);
+          
+          await dbCloud.collection('recharges').add({
+            data: {
+              activityId: this.data.activityId,
+              amount: amount,
+              payer: originalPayer, // 原付款人（充值人）
+              keeper: this.data.keeper, // 保管人员（收款人）
+              recorder: userName, // 记录人（当前用户）
+              date: date,
+              creator: userName,
+              createdAt: new Date()
+            }
+          });
+          
+          // 弹出提示对话框
+          wx.hideLoading();
+          wx.showModal({
+            title: '提示',
+            content: `预存模式下，付款人已自动修改为保管人员（${this.data.keeper}），并已创建充值记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`,
+            showCancel: false,
+            confirmText: '确定',
+            success: () => {
+              wx.showToast({
+                title: '保存成功',
+                icon: 'success'
+              });
+            }
+          });
+        } else {
+          wx.hideLoading();
+          wx.showToast({
+            title: '保存成功',
+            icon: 'success'
+          });
+        }
       }
       
       // 返回上一页

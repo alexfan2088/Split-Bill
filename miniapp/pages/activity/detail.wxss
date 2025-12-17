@@ -320,16 +320,17 @@
 }
 
 .btn-add-inline {
-  margin-left: auto;
-  margin-right: 20rpx;
+  flex: 1;
   background-color: #007bff;
   color: white;
-  padding: 12rpx 24rpx;
-  border-radius: 6rpx;
-  font-size: 24rpx;
+  padding: 24rpx;
+  border-radius: 0;
+  font-size: 28rpx;
   line-height: 1.5;
   border: none;
   height: auto;
+  text-align: center;
+  margin: 0;
 }
 
 .summary-content {
@@ -696,7 +697,7 @@
   font-weight: bold;
 }
 
-/* 打平伙相关样式 */
+/* 预存相关样式 */
 .recharge-content {
   background-color: white;
   border-radius: 8rpx;

@@ -15,7 +15,7 @@ Page({
     dateRange: '',
     suggestionMember: null,
     isCreator: false, // 是否是活动创建者
-    isPrepaid: false, // 是否打平伙
+    isPrepaid: false, // 是否预存
     keeper: '', // 保管人员
     recharges: [], // 充值列表
     totalRecharge: 0, // 充值总金额
@@ -118,15 +118,8 @@ Page({
         };
       });
       
-      // 等待 DOM 更新后绘制 canvas
-      this.$nextTick ? this.$nextTick(() => {
-        this.drawPieCharts(processedBills);
-      }) : setTimeout(() => {
-        this.drawPieCharts(processedBills);
-      }, 100);
-      
       // 计算余额
-      // 如果是打平伙活动，需要传入充值数据
+      // 如果是预存活动，需要传入充值数据
       let balances = {};
       if (activity.isPrepaid) {
         // 先加载充值数据
@@ -216,7 +209,7 @@ Page({
       // 建议下一次买单人员（余额最小的成员）
       const suggestionMember = this.getSuggestionMember(balances);
       
-      // 如果是打平伙活动，加载充值数据
+      // 如果是预存活动，加载充值数据
       let recharges = [];
       let totalRecharge = 0;
       let totalConsume = total;
@@ -291,9 +284,9 @@ Page({
             activityId: r.activityId
           })));
           
-          // 如果充值记录数量为0，但活动是打平伙，可能是权限问题
+          // 如果充值记录数量为0，但活动是预存，可能是权限问题
           if (recharges.length === 0 && activity.isPrepaid) {
-            console.warn('⚠️ 警告：打平伙活动但没有充值记录！');
+            console.warn('⚠️ 警告：预存活动但没有充值记录！');
             console.warn('可能的原因：');
             console.warn('  1. 数据库权限问题 - recharges集合可能设置为"仅创建者可读"');
             console.warn('  2. 确实没有充值记录');
@@ -376,6 +369,12 @@ Page({
       app.globalData.currentActivity = activity;
       app.globalData.currentActivityBills = bills;
       app.globalData.currentActivityBalances = balances;
+      
+      // 等待 DOM 更新后绘制 canvas（在 setData 之后）
+      // 增加延迟时间，确保Canvas完全渲染，特别是预存模式下需要等待更长时间
+      setTimeout(() => {
+        this.drawPieCharts(processedBills);
+      }, 300);
       
     } catch (e) {
       console.error('加载活动数据失败:', e);
@@ -565,7 +564,7 @@ Page({
       map[m.name] = { paid: 0, shouldPay: 0, balance: 0 };
     });
     
-    // 如果是打平伙活动，实付为充值金额（所有充值记录的总和）
+    // 如果是预存活动，实付为充值金额（所有充值记录的总和）
     if (recharges.length > 0) {
       console.log('计算实付 - 充值记录数量:', recharges.length);
       recharges.forEach(r => {
@@ -578,7 +577,7 @@ Page({
         }
       });
     } else {
-      // 非打平伙活动，实付为账单付款金额
+      // 非预存活动，实付为账单付款金额
       bills.forEach(b => {
         const amount = Number(b.amount || 0);
         if (b.payer && map[b.payer]) {
@@ -829,19 +828,44 @@ Page({
       const pieCircle = bill.circles.find(c => c.type === 'pie');
       if (!pieCircle || !pieCircle.sectors) continue;
 
+      // 重试机制：最多重试3次，每次间隔100ms
+      let retryCount = 0;
+      const maxRetries = 3;
+      let canvasNode = null;
+      
+      while (retryCount < maxRetries && !canvasNode) {
+        try {
+          const query = wx.createSelectorQuery().in(this);
+          canvasNode = await new Promise((resolve, reject) => {
+            query.select(`#pieCanvas_${bill._id}`)
+              .fields({ node: true, size: true })
+              .exec((res) => {
+                if (res[0] && res[0].node) {
+                  resolve(res[0]);
+                } else {
+                  reject(new Error('Canvas not found'));
+                }
+              });
+          });
+          break; // 成功获取Canvas，退出循环
+        } catch (e) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            // 等待100ms后重试
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } else {
+            console.error(`绘制扇形图失败（已重试${maxRetries}次）:`, e, `bill._id: ${bill._id}`);
+            break; // 重试失败，退出循环
+          }
+        }
+      }
+      
+      if (!canvasNode) {
+        console.warn(`无法获取Canvas: pieCanvas_${bill._id}，跳过绘制`);
+        continue;
+      }
+
       try {
-        const query = wx.createSelectorQuery().in(this);
-        const canvasNode = await new Promise((resolve, reject) => {
-          query.select(`#pieCanvas_${bill._id}`)
-            .fields({ node: true, size: true })
-            .exec((res) => {
-              if (res[0] && res[0].node) {
-                resolve(res[0]);
-              } else {
-                reject(new Error('Canvas not found'));
-              }
-            });
-        });
 
         const canvas = canvasNode.node;
         const ctx = canvas.getContext('2d');
