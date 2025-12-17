@@ -19,6 +19,7 @@ Page({
     defaultTypes: ['聚餐', '秋秋妹', '麻将', '掼蛋', '公园'], // 系统默认类型（不可删除）
     commonTypes: ['聚餐', '秋秋妹', '麻将', '掼蛋', '公园'], // 常用类型（包含系统类型和自定义类型）
     remarkEditing: false, // 备注是否在编辑状态
+    formattedRemark: [], // 格式化后的备注内容（用于显示高亮）
   },
   
   async onLoad(options) {
@@ -99,6 +100,8 @@ Page({
       this.setData({
         remark: defaultRemark
       });
+      // 格式化备注内容用于显示（高亮"默认方式"和"预存模式"）
+      this.formatRemarkForDisplay(defaultRemark);
       
       wx.setNavigationBarTitle({
         title: '创建活动'
@@ -316,6 +319,56 @@ Page({
     });
   },
   
+  // 格式化备注内容用于显示（高亮"默认方式"和"预存模式"）
+  formatRemarkForDisplay(remarkText) {
+    if (!remarkText) {
+      this.setData({ formattedRemark: [] });
+      return;
+    }
+    
+    const parts = [];
+    const keywords = ['默认方式', '预存模式'];
+    let text = remarkText;
+    
+    // 查找所有关键词的位置
+    const matches = [];
+    keywords.forEach(keyword => {
+      let index = text.indexOf(keyword);
+      while (index !== -1) {
+        matches.push({ keyword, index });
+        index = text.indexOf(keyword, index + 1);
+      }
+    });
+    
+    // 按位置排序
+    matches.sort((a, b) => a.index - b.index);
+    
+    // 如果没有匹配，直接返回整个文本
+    if (matches.length === 0) {
+      this.setData({ formattedRemark: [{ text: remarkText, highlight: false }] });
+      return;
+    }
+    
+    // 拆分文本
+    let lastIndex = 0;
+    matches.forEach((match) => {
+      // 添加关键词前的文本
+      if (match.index > lastIndex) {
+        parts.push({ text: text.substring(lastIndex, match.index), highlight: false });
+      }
+      // 添加高亮的关键词
+      parts.push({ text: match.keyword, highlight: true });
+      lastIndex = match.index + match.keyword.length;
+    });
+    
+    // 添加最后剩余的文本
+    if (lastIndex < text.length) {
+      parts.push({ text: text.substring(lastIndex), highlight: false });
+    }
+    
+    this.setData({ formattedRemark: parts });
+  },
+  
   // 开始编辑备注
   startEditRemark() {
     this.setData({ remarkEditing: true });
@@ -389,6 +442,42 @@ Page({
       wx.showToast({
         title: '请至少添加一个成员',
         icon: 'none'
+      });
+      return;
+    }
+    
+    // 检查成员是否有重名
+    const nameCounts = {};
+    const duplicateNames = [];
+    memberNames.forEach(name => {
+      if (nameCounts[name]) {
+        nameCounts[name]++;
+        if (nameCounts[name] === 2) {
+          // 第一次发现重复，添加到重复列表
+          duplicateNames.push(name);
+        }
+      } else {
+        nameCounts[name] = 1;
+      }
+    });
+    
+    if (duplicateNames.length > 0) {
+      wx.showModal({
+        title: '提示',
+        content: `参与成员有重名：${duplicateNames.join('、')}，请修改后重试。`,
+        showCancel: false,
+        confirmText: '确定'
+      });
+      return;
+    }
+    
+    // 如果是预存活动，必须选择保管人
+    if (this.data.isPrepaid && !this.data.keeper) {
+      wx.showModal({
+        title: '提示',
+        content: '预存活动必须选择保管人员，请选择后再保存。',
+        showCancel: false,
+        confirmText: '确定'
       });
       return;
     }

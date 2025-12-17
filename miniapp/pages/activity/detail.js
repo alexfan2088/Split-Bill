@@ -22,6 +22,7 @@ Page({
     totalConsume: 0, // 消费总金额
     remaining: 0, // 剩余金额
     rawBills: [], // 原始账单数据，含分摊详情
+    rawRecharges: [], // 原始充值数据
     showMemberBills: false,
     selectedMemberBills: [], // 用户应付账单列表（收入）
     selectedMemberPaidBills: [], // 用户实付账单列表（支出）
@@ -96,6 +97,31 @@ Page({
       const userName = db.getCurrentUser();
       const isActivityCreator = activity.creator === userName;
       
+      // 如果是预存活动，先加载充值记录，以便从关联的充值记录中获取原始付款人
+      let rechargeMap = {}; // 用于快速查找充值记录
+      if (activity.isPrepaid) {
+        try {
+          const dbCloud = wx.cloud.database();
+          const rechargesRes = await dbCloud.collection('recharges')
+            .where({ activityId: activityId })
+            .get();
+          const recharges = rechargesRes.data || [];
+          // 建立账单ID到充值记录的映射（通过relatedRechargeId）
+          recharges.forEach(r => {
+            // 通过relatedRechargeId反向查找账单
+            // 但这里我们需要在后续处理中通过relatedRechargeId查找
+          });
+          // 建立充值记录ID到充值记录的映射
+          recharges.forEach(r => {
+            if (r._id) {
+              rechargeMap[r._id] = r;
+            }
+          });
+        } catch (e) {
+          console.error('加载充值记录失败（用于获取原始付款人）:', e);
+        }
+      }
+      
       const processedBills = bills.map((bill, billIndex) => {
         const circles = this.generateCircles(bill);
         const totalCount = this.calculateTotalCount(bill);
@@ -104,8 +130,20 @@ Page({
         // 金额格式化为2位小数
         const amount = this.formatAmount(bill.amount || 0);
         
+        // 获取原始付款人：优先使用账单中的originalPayer，如果没有则从关联的充值记录中获取
+        let originalPayer = bill.originalPayer || '';
+        if (!originalPayer && bill.isPayerAutoModified && bill.relatedRechargeId) {
+          const relatedRecharge = rechargeMap[bill.relatedRechargeId];
+          if (relatedRecharge && relatedRecharge.payer) {
+            originalPayer = relatedRecharge.payer;
+            console.log(`从充值记录获取原始付款人: 账单 ${bill.title}, 原始付款人: ${originalPayer}`);
+          }
+        }
+        
         console.log(`账单 ${bill.title} - participants:`, bill.participants);
         console.log(`账单 ${bill.title} - totalCount:`, totalCount);
+        console.log(`账单 ${bill.title} - isPayerAutoModified:`, bill.isPayerAutoModified);
+        console.log(`账单 ${bill.title} - originalPayer:`, originalPayer);
         
         return {
           ...bill,
@@ -115,6 +153,9 @@ Page({
           isCreator: isBillCreator,
           amount, // 格式化的金额字符串
           billIndex, // 添加索引用于 canvas ID
+          isPayerAutoModified: bill.isPayerAutoModified || false, // 付款人是否被自动修改
+          originalPayer: originalPayer, // 原始付款人（如果被自动修改）
+          billshow: bill.billshow || null, // 用于显示的付款人（预存模式下，如果付款人被修改为保管人，保存原始付款人）
         };
       });
       
@@ -153,13 +194,13 @@ Page({
           const recharges = rechargesRes.data || [];
           console.log('结算计算使用的充值记录数量:', recharges.length);
           console.log('结算计算使用的充值记录:', recharges.map(r => ({ payer: r.payer, amount: r.amount })));
-          balances = this.calcBalances(activity.members || [], bills, recharges);
+          balances = this.calcBalances(activity.members || [], bills, recharges, activity.keeper);
         } catch (e) {
           console.error('加载充值数据失败:', e);
-          balances = this.calcBalances(activity.members || [], bills, []);
+          balances = this.calcBalances(activity.members || [], bills, [], activity.keeper);
         }
       } else {
-        balances = this.calcBalances(activity.members || [], bills, []);
+        balances = this.calcBalances(activity.members || [], bills, [], '');
       }
       
       // 计算总支出和人均
@@ -202,8 +243,43 @@ Page({
             paid: this.formatAmount(bal.paid),
             shouldPay: this.formatAmount(bal.shouldPay),
             balance: this.formatAmount(bal.balance)
-          }
+          },
+          // 保存原始余额值用于排序
+          _balanceValue: bal.balance
         };
+      });
+      
+      // 对成员列表进行排序：
+      // 1. 先排负值，按照绝对值最大降序（余额最小的在最前面）
+      // 2. 然后排正值，按照绝对值最大降序（余额最大的在前面）
+      // 3. 最后排0值
+      members.sort((a, b) => {
+        const balanceA = a._balanceValue || 0;
+        const balanceB = b._balanceValue || 0;
+        
+        // 负值
+        if (balanceA < 0 && balanceB < 0) {
+          // 按绝对值降序（余额最小的在最前面，如 -100, -50, -10）
+          return Math.abs(balanceB) - Math.abs(balanceA);
+        }
+        if (balanceA < 0) return -1; // 负值在前
+        if (balanceB < 0) return 1;
+        
+        // 正值
+        if (balanceA > 0 && balanceB > 0) {
+          // 按绝对值降序（余额最大的在前面）
+          return Math.abs(balanceB) - Math.abs(balanceA);
+        }
+        if (balanceA > 0) return -1; // 正值在负值之后，但在0值之前
+        if (balanceB > 0) return 1;
+        
+        // 0值
+        return 0;
+      });
+      
+      // 移除临时排序字段
+      members.forEach(m => {
+        delete m._balanceValue;
       });
       
       // 建议下一次买单人员（余额最小的成员）
@@ -345,6 +421,7 @@ Page({
         activityMeta,
         bills: processedBills,
         rawBills: bills, // 保存原始账单数据
+        rawRecharges: recharges, // 保存原始充值数据
         members,
         total: this.formatAmount(total),
         avg: this.formatAmount(avg),
@@ -359,6 +436,8 @@ Page({
           amount: this.formatAmount(r.amount || 0),
           recorder: r.recorder || r.creator, // 记录人，如果没有recorder字段则使用creator
           isCreator: r.creator === db.getCurrentUser(),
+          isRecorder: (r.recorder || r.creator) === db.getCurrentUser(), // 是否是记录人
+          isAuto: r.isAuto || false, // 是否是自动生成的充值记录
         })),
         totalRecharge: this.formatAmount(totalRecharge),
         totalConsume: this.formatAmount(totalConsume),
@@ -372,9 +451,10 @@ Page({
       
       // 等待 DOM 更新后绘制 canvas（在 setData 之后）
       // 增加延迟时间，确保Canvas完全渲染，特别是预存模式下需要等待更长时间
+      // 使用更长的延迟，确保 Canvas 2D 完全初始化
       setTimeout(() => {
         this.drawPieCharts(processedBills);
-      }, 300);
+      }, 800); // 增加延迟到 800ms
       
     } catch (e) {
       console.error('加载活动数据失败:', e);
@@ -392,7 +472,9 @@ Page({
     const circles = [];
     
     // 获取付款人和记录人
-    const payer = bill.payer || '';
+    // 预存模式下，如果有 billshow 字段，使用它来显示付款人（用于保持账务平衡显示）
+    // 但实际保存的 payer 是保管人
+    const payer = (bill.billshow || bill.payer) || '';
     const recorder = bill.recorder || bill.creator || '';
     
     // 获取所有权重大于0的参与人员
@@ -558,22 +640,62 @@ Page({
   },
   
   // 计算余额
-  calcBalances(members, bills, recharges = []) {
+  calcBalances(members, bills, recharges = [], keeper = '') {
     const map = {};
     members.forEach(m => {
       map[m.name] = { paid: 0, shouldPay: 0, balance: 0 };
     });
     
-    // 如果是预存活动，实付为充值金额（所有充值记录的总和）
-    if (recharges.length > 0) {
-      console.log('计算实付 - 充值记录数量:', recharges.length);
+    // 如果是预存活动
+    if (recharges.length > 0 && keeper) {
+      console.log('计算实付 - 预存模式，保管人:', keeper);
+      console.log('充值记录数量:', recharges.length);
+      
+      // 1. 预存人的实付 = 充值金额（充值记录中的payer）
       recharges.forEach(r => {
         const amount = Number(r.amount || 0);
-        const payer = r.payer;
-        console.log(`充值记录 - 付款人: ${payer}, 金额: ${amount}`);
+        const payer = r.payer; // 预存人（充值的人）
+        console.log(`充值记录 - 预存人: ${payer}, 金额: ${amount}`);
         if (payer && map[payer]) {
           map[payer].paid += amount;
-          console.log(`更新 ${payer} 的实付: ${map[payer].paid}`);
+          console.log(`更新预存人 ${payer} 的实付: ${map[payer].paid}`);
+        }
+      });
+      
+      // 2. 保管人的实付 = 账单付款金额（因为保管人实际支付了账单）
+      bills.forEach(b => {
+        const amount = Number(b.amount || 0);
+        const billPayer = b.payer; // 账单付款人（通常是保管人）
+        console.log(`账单 - 付款人: ${billPayer}, 金额: ${amount}`);
+        if (billPayer && map[billPayer]) {
+          map[billPayer].paid += amount;
+          console.log(`更新付款人 ${billPayer} 的实付: ${map[billPayer].paid}`);
+        }
+      });
+      
+      // 3. 保管人的应付 = 收到的充值金额总和
+      let keeperRechargeTotal = 0;
+      recharges.forEach(r => {
+        const amount = Number(r.amount || 0);
+        if (r.keeper === keeper) {
+          keeperRechargeTotal += amount;
+        }
+      });
+      if (map[keeper]) {
+        map[keeper].shouldPay = keeperRechargeTotal;
+        console.log(`保管人 ${keeper} 的应付（充值总额）: ${keeperRechargeTotal}`);
+      }
+      
+      // 4. 其他成员的应付按账单分摊计算（不包括保管人）
+      bills.forEach(b => {
+        if (b.splitDetail) {
+          Object.keys(b.splitDetail).forEach(name => {
+            if (!map[name] || name === keeper) return; // 跳过保管人
+            // 只有权重大于0的成员才计算应付
+            if (b.participants && b.participants[name] > 0) {
+              map[name].shouldPay += Number(b.splitDetail[name] || 0);
+            }
+          });
         }
       });
     } else {
@@ -584,20 +706,20 @@ Page({
           map[b.payer].paid += amount;
         }
       });
+      
+      // 统计应付（所有活动都按账单分摊计算）
+      bills.forEach(b => {
+        if (b.splitDetail) {
+          Object.keys(b.splitDetail).forEach(name => {
+            if (!map[name]) return;
+            // 只有权重大于0的成员才计算应付
+            if (b.participants && b.participants[name] > 0) {
+              map[name].shouldPay += Number(b.splitDetail[name] || 0);
+            }
+          });
+        }
+      });
     }
-    
-    // 统计应付（所有活动都按账单分摊计算）
-    bills.forEach(b => {
-      if (b.splitDetail) {
-        Object.keys(b.splitDetail).forEach(name => {
-          if (!map[name]) return;
-          // 只有权重大于0的成员才计算应付
-          if (b.participants && b.participants[name] > 0) {
-            map[name].shouldPay += Number(b.splitDetail[name] || 0);
-          }
-        });
-      }
-    });
     
     // 余额：实付 - 应付
     Object.keys(map).forEach(name => {
@@ -613,26 +735,36 @@ Page({
     const memberName = e.currentTarget.dataset.name;
     if (!memberName) return;
     const rawBills = this.data.rawBills || [];
+    const isPrepaid = this.data.isPrepaid || false;
+    const keeper = this.data.keeper || '';
+    const rawRecharges = this.data.rawRecharges || [];
     
     // 用户应付的账单列表（该用户参与的账单）
     const memberBills = rawBills
       .filter(b => b && b.splitDetail && b.participants && b.participants[memberName] !== undefined && b.participants[memberName] > 0 && b.splitDetail[memberName] !== undefined)
       .map(b => {
+        // 预存模式下，如果有 billshow 字段，使用它来显示付款人（用于保持账务平衡显示）
+        const displayPayer = (b.billshow || b.payer) || '未知';
         return {
           _id: b._id,
           creator: b.creator,
           title: b.title || '未命名',
-          payer: b.payer || '未知',
+          payer: displayPayer, // 使用 billshow 或 payer 来显示
           totalAmount: this.formatAmount(b.amount || 0),
           userAmount: this.formatAmount(b.splitDetail[memberName] || 0),
           date: this.formatBillDate(b),
-          paid: b.payer === memberName, // 付款人为本人视为已付
+          paid: displayPayer === memberName, // 付款人为本人视为已付（使用显示付款人）
         };
       });
     
     // 用户实付的账单列表（该用户付款的账单）
+    // 预存模式下，需要检查 billshow 字段，如果 billshow 是当前用户，也应该显示
     const memberPaidBills = rawBills
-      .filter(b => b && b.payer === memberName)
+      .filter(b => {
+        // 如果账单的 billshow 是当前用户，或者账单的 payer 是当前用户，都算作实付
+        const displayPayer = (b.billshow || b.payer) || '';
+        return displayPayer === memberName;
+      })
       .map(b => {
         // 计算收款人（所有参与人中，除了付款人自己）
         const participants = b.participants ? Object.keys(b.participants).filter(name => 
@@ -650,11 +782,50 @@ Page({
         };
       });
     
-    // 计算收入总额（用户应付金额的总和）
-    const incomeTotal = memberBills.reduce((sum, bill) => sum + Number(bill.userAmount || 0), 0);
+    // 计算收入总额
+    let incomeTotal = 0;
+    if (isPrepaid && memberName === keeper) {
+      // 预存模式下，保管人的收入 = 收到的充值金额
+      rawRecharges.forEach(r => {
+        const amount = Number(r.amount || 0);
+        if (r.keeper === keeper) {
+          incomeTotal += amount;
+        }
+      });
+    } else {
+      // 非预存模式或非保管人，收入 = 用户应付金额的总和
+      incomeTotal = memberBills.reduce((sum, bill) => {
+        // 解析格式化后的金额字符串
+        const amount = Number(bill.userAmount || 0);
+        return sum + amount;
+      }, 0);
+    }
     
-    // 计算支出总额（用户付款的账单总金额）
-    const expenseTotal = memberPaidBills.reduce((sum, bill) => sum + Number(bill.totalAmount || 0), 0);
+    // 计算支出总额
+    let expenseTotal = 0;
+    if (isPrepaid && memberName === keeper) {
+      // 预存模式下，保管人的支出 = 支付的账单总金额
+      expenseTotal = memberPaidBills.reduce((sum, bill) => {
+        // 解析格式化后的金额字符串
+        const amount = Number(bill.totalAmount || 0);
+        return sum + amount;
+      }, 0);
+    } else if (isPrepaid) {
+      // 预存模式下，预存人的支出 = 充值金额
+      rawRecharges.forEach(r => {
+        const amount = Number(r.amount || 0);
+        if (r.payer === memberName) {
+          expenseTotal += amount;
+        }
+      });
+    } else {
+      // 非预存模式，支出 = 用户付款的账单总金额
+      expenseTotal = memberPaidBills.reduce((sum, bill) => {
+        // 解析格式化后的金额字符串
+        const amount = Number(bill.totalAmount || 0);
+        return sum + amount;
+      }, 0);
+    }
     
     // 计算余额（支出 - 收入）
     const balance = expenseTotal - incomeTotal;
@@ -759,10 +930,11 @@ Page({
     
     // 如果切换到账单页面，需要重新绘制饼图
     if (tab === 'bills' && this.data.bills && this.data.bills.length > 0) {
-      // 延迟绘制，等待DOM更新
+      // 延迟绘制，等待DOM更新和 Canvas 2D 初始化
+      // 增加延迟时间，确保 Canvas 完全渲染
       setTimeout(() => {
         this.drawPieCharts(this.data.bills);
-      }, 200);
+      }, 800); // 增加延迟到 800ms，确保 Canvas 2D 完全初始化
     }
   },
   
@@ -794,6 +966,31 @@ Page({
         if (res.confirm) {
           wx.showLoading({ title: '删除中...' });
           try {
+            const dbCloud = wx.cloud.database();
+            
+            // 如果是预存模式，先检查账单是否有关联的充值记录
+            if (this.data.isPrepaid) {
+              try {
+                const billDoc = await dbCloud.collection('bills').doc(billId).get();
+                const bill = billDoc.data;
+                
+                // 如果账单有关联的充值记录ID，删除对应的充值记录
+                if (bill && bill.relatedRechargeId) {
+                  try {
+                    await dbCloud.collection('recharges').doc(bill.relatedRechargeId).remove();
+                    console.log('已同步删除关联的充值记录:', bill.relatedRechargeId);
+                  } catch (rechargeErr) {
+                    console.error('删除关联充值记录失败:', rechargeErr);
+                    // 继续删除账单，不因为充值记录删除失败而阻止
+                  }
+                }
+              } catch (billErr) {
+                console.error('获取账单信息失败:', billErr);
+                // 继续删除账单
+              }
+            }
+            
+            // 删除账单
             const result = await db.deleteBill(billId);
             if (result.success) {
               wx.hideLoading();
@@ -807,6 +1004,7 @@ Page({
             }
           } catch (e) {
             wx.hideLoading();
+            console.error('删除账单失败:', e);
             wx.showToast({
               title: '删除失败',
               icon: 'none'
@@ -828,9 +1026,13 @@ Page({
       const pieCircle = bill.circles.find(c => c.type === 'pie');
       if (!pieCircle || !pieCircle.sectors) continue;
 
-      // 重试机制：最多重试3次，每次间隔100ms
+      // 重试机制：最多重试10次，每次间隔300ms
+      // Canvas 2D 需要更多时间初始化，特别是在切换 Tab 时
+      // 第一次查询前先等待一下，确保 Canvas 开始渲染
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       let retryCount = 0;
-      const maxRetries = 3;
+      const maxRetries = 10; // 增加重试次数到10次
       let canvasNode = null;
       
       while (retryCount < maxRetries && !canvasNode) {
@@ -851,8 +1053,8 @@ Page({
         } catch (e) {
           retryCount++;
           if (retryCount < maxRetries) {
-            // 等待100ms后重试
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // 等待300ms后重试，给 Canvas 2D 更多时间初始化
+            await new Promise(resolve => setTimeout(resolve, 300));
           } else {
             console.error(`绘制扇形图失败（已重试${maxRetries}次）:`, e, `bill._id: ${bill._id}`);
             break; // 重试失败，退出循环
@@ -971,6 +1173,30 @@ Page({
     });
   },
   
+  // 查看/编辑充值（点击充值记录）
+  viewRecharge(e) {
+    const rechargeId = e.currentTarget.dataset.id;
+    
+    // 检查是否是自动生成的充值记录
+    const recharge = this.data.recharges.find(r => r._id === rechargeId);
+    if (recharge && recharge.isAuto) {
+      wx.showToast({
+        title: '自动生成的充值记录不可编辑',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    wx.navigateTo({
+      url: `/pages/recharge/add?activityId=${this.data.activityId}&rechargeId=${rechargeId}`
+    });
+  },
+  
+  // 阻止事件冒泡
+  noop() {
+    // 空函数，用于阻止按钮点击事件冒泡
+  },
+  
   // 删除充值
   deleteRecharge(e) {
     const rechargeId = e.currentTarget.dataset.id;
@@ -983,6 +1209,15 @@ Page({
     if (!recharge) {
       wx.showToast({
         title: '找不到充值记录',
+        icon: 'none'
+      });
+      return;
+    }
+    
+    // 检查是否是自动生成的充值记录
+    if (recharge.isAuto) {
+      wx.showToast({
+        title: '自动生成的充值记录不可删除',
         icon: 'none'
       });
       return;

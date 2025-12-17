@@ -317,14 +317,30 @@ Page({
       let payerIndex = 0;
       let payerDisabled = false;
       
-      // 如果是预存活动，默认付款人为保管人员，但允许修改
-      if (isPrepaid && keeper) {
+      // 如果是预存活动，使用 billshow 字段来显示付款人（如果存在）
+      // billshow 是原始付款人，用于显示和编辑，但实际保存的 payer 是保管人
+      if (isPrepaid && keeper && bill.billshow) {
+        // 如果有 billshow 字段，使用它来设置显示的付款人
+        const billshowIndex = this.data.payerList.findIndex(p => p.name === bill.billshow);
+        if (billshowIndex >= 0) {
+          payerIndex = billshowIndex;
+        } else {
+          // 如果 billshow 不在列表中，使用保管人
+          const keeperIndex = this.data.payerList.findIndex(p => p.name === keeper);
+          if (keeperIndex >= 0) {
+            payerIndex = keeperIndex;
+          }
+        }
+        payerDisabled = false;
+      } else if (isPrepaid && keeper) {
+        // 如果没有 billshow 字段，检查是否是自动修改的账单
         const keeperIndex = this.data.payerList.findIndex(p => p.name === keeper);
         if (keeperIndex >= 0) {
           // 编辑模式下，如果账单中的付款人不是保管人，使用账单中的付款人
           // 否则使用保管人作为默认值
           const billPayerIndex = this.data.payerList.findIndex(p => p.name === bill.payer);
-          if (billPayerIndex >= 0) {
+          if (billPayerIndex >= 0 && bill.payer !== keeper) {
+            // 如果付款人不是保管人，使用账单中的付款人
             payerIndex = billPayerIndex;
           } else {
             payerIndex = keeperIndex;
@@ -473,10 +489,26 @@ Page({
     // 预存模式特殊处理：如果付款人不是保管人，需要创建充值记录
     let needCreateRecharge = false;
     let originalPayer = null;
-    if (this.data.isPrepaid && this.data.keeper && payer !== this.data.keeper) {
-      originalPayer = payer;
-      payer = this.data.keeper; // 修改付款人为保管人员
-      needCreateRecharge = true;
+    let billshow = null; // 用于显示的付款人（原始付款人）
+    if (this.data.isPrepaid && this.data.keeper) {
+      if (payer !== this.data.keeper) {
+        // 如果付款人不是保管人，需要创建充值记录
+        originalPayer = payer;
+        billshow = payer; // 保存原始付款人用于显示
+        payer = this.data.keeper; // 修改付款人为保管人员（实际保存的付款人）
+        needCreateRecharge = true;
+      } else {
+        // 如果付款人就是保管人
+        // 在编辑模式下，如果账单原来有 billshow，且用户选择了保管人，清除 billshow
+        // 在新建模式下，如果用户选择了保管人，billshow 为空
+        if (this.data.isEdit) {
+          // 编辑模式：如果用户选择了保管人，清除 billshow（使用实际付款人）
+          billshow = null;
+        } else {
+          // 新建模式：如果用户选择了保管人，billshow 为空
+          billshow = null;
+        }
+      }
     }
     
     // 收集参与成员权重（与Web版本保持一致）
@@ -585,6 +617,7 @@ Page({
         const currentBill = currentBillDoc.data;
         const oldParticipants = currentBill.participants || {};
         const oldParticipantNames = Object.keys(oldParticipants);
+        const existingRelatedRechargeId = currentBill.relatedRechargeId || null; // 获取现有的关联充值记录ID
         
         // 找出需要删除的旧成员（不在当前活动成员列表中的）
         const oldMembersToRemove = oldParticipantNames.filter(name => !currentMemberNames.includes(name));
@@ -611,9 +644,140 @@ Page({
         };
         
         // 使用 set 方法完全替换文档，确保清除所有旧字段（包括旧成员的participants和splitDetail）
+        // 注意：relatedRechargeId 会在后续逻辑中更新，这里先不设置
+        // 如果付款人改为保管人，需要清除 relatedRechargeId
+        let finalRelatedRechargeId = null;
+        if (needCreateRecharge) {
+          // 如果需要创建预存记录，先保留原有的ID，后续会更新
+          finalRelatedRechargeId = existingRelatedRechargeId;
+        } else if (existingRelatedRechargeId) {
+          // 如果付款人改为保管人，清除关联记录ID（预存记录会在后续逻辑中删除）
+          finalRelatedRechargeId = null;
+        }
+        
         await dbCloud.collection('bills').doc(this.data.billId).set({
-          data: cleanBillData
+          data: {
+            ...cleanBillData,
+            payer: payer, // 使用修改后的付款人（如果是预存模式且付款人不是保管人，已修改为保管人）
+            isPayerAutoModified: needCreateRecharge || false, // 标记付款人是否被自动修改
+            originalPayer: needCreateRecharge ? originalPayer : null, // 保存原始付款人（如果被自动修改）
+            billshow: billshow || null, // 用于显示的付款人（预存模式下，如果付款人被修改为保管人，保存原始付款人）
+            relatedRechargeId: finalRelatedRechargeId, // 根据情况设置或清除关联记录ID
+          }
         });
+        
+        // 处理预存记录：更新现有记录或创建新记录
+        let relatedRechargeId = null;
+        if (this.data.isPrepaid && this.data.keeper) {
+          if (needCreateRecharge && originalPayer) {
+            // 需要创建或更新预存记录
+            const dateStr = this.data.date; // 格式：yyyy-MM-dd
+            const date = new Date(`${dateStr}T00:00:00`);
+            
+            if (existingRelatedRechargeId) {
+              // 如果已有关联的预存记录，更新它而不是创建新的
+              try {
+                await dbCloud.collection('recharges').doc(existingRelatedRechargeId).update({
+                  data: {
+                    amount: amount,
+                    payer: originalPayer, // 更新为新的付款人（充值人）
+                    date: date,
+                    updatedAt: new Date()
+                  }
+                });
+                relatedRechargeId = existingRelatedRechargeId;
+                console.log('已更新关联的预存记录:', existingRelatedRechargeId);
+              } catch (updateErr) {
+                console.error('更新预存记录失败:', updateErr);
+                // 如果更新失败，尝试创建新记录
+                const rechargeResult = await dbCloud.collection('recharges').add({
+                  data: {
+                    activityId: this.data.activityId,
+                    amount: amount,
+                    payer: originalPayer,
+                    keeper: this.data.keeper,
+                    recorder: userName,
+                    date: date,
+                    creator: userName,
+                    createdAt: new Date(),
+                    isAuto: true
+                  }
+                });
+                relatedRechargeId = rechargeResult._id;
+              }
+            } else {
+              // 如果没有关联记录，创建新的
+              const rechargeResult = await dbCloud.collection('recharges').add({
+                data: {
+                  activityId: this.data.activityId,
+                  amount: amount,
+                  payer: originalPayer, // 原付款人（充值人）
+                  keeper: this.data.keeper, // 保管人员（收款人）
+                  recorder: userName, // 记录人（当前用户）
+                  date: date,
+                  creator: userName,
+                  createdAt: new Date(),
+                  isAuto: true // 标记为自动生成的充值记录
+                }
+              });
+              relatedRechargeId = rechargeResult._id;
+            }
+            
+            // 更新账单，保存关联的充值记录ID
+            if (relatedRechargeId) {
+              await dbCloud.collection('bills').doc(this.data.billId).update({
+                data: {
+                  relatedRechargeId: relatedRechargeId
+                }
+              });
+            }
+            
+            // 弹出提示对话框
+            wx.hideLoading();
+            wx.showModal({
+              title: '提示',
+              content: existingRelatedRechargeId 
+                ? `预存模式下，付款人已修改，已同步更新预存记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`
+                : `预存模式下，付款人不是保管人员，已自动创建充值记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`,
+              showCancel: false,
+              confirmText: '确定',
+              success: () => {
+                wx.showToast({
+                  title: '更新成功',
+                  icon: 'success'
+                });
+              }
+            });
+          } else if (existingRelatedRechargeId) {
+            // 如果付款人改为保管人，删除关联的预存记录
+            // 注意：账单中的 relatedRechargeId 已经在上面更新账单时清除了
+            try {
+              await dbCloud.collection('recharges').doc(existingRelatedRechargeId).remove();
+              console.log('已删除关联的预存记录:', existingRelatedRechargeId);
+            } catch (deleteErr) {
+              console.error('删除预存记录失败:', deleteErr);
+              // 即使删除失败，也继续执行，因为账单中的关联已经清除
+            }
+            
+            wx.hideLoading();
+            wx.showToast({
+              title: '更新成功',
+              icon: 'success'
+            });
+          } else {
+            wx.hideLoading();
+            wx.showToast({
+              title: '更新成功',
+              icon: 'success'
+            });
+          }
+        } else {
+          wx.hideLoading();
+          wx.showToast({
+            title: '更新成功',
+            icon: 'success'
+          });
+        }
         
         // 验证更新后的数据
         const updatedBill = await dbCloud.collection('bills').doc(this.data.billId).get();
@@ -640,12 +804,6 @@ Page({
         } else {
           console.log('✓ splitDetail包含所有成员');
         }
-        
-        wx.hideLoading();
-        wx.showToast({
-          title: '更新成功',
-          icon: 'success'
-        });
       } else {
         // 创建账单
         const billResult = await dbCloud.collection('bills').add({
@@ -654,15 +812,19 @@ Page({
             payer: payer, // 使用修改后的付款人（如果是预存模式且付款人不是保管人，已修改为保管人）
             creator: userName,
             createdAt: new Date(),
+            isPayerAutoModified: needCreateRecharge || false, // 标记付款人是否被自动修改
+            originalPayer: needCreateRecharge ? originalPayer : null, // 保存原始付款人（如果被自动修改）
+            billshow: billshow || null, // 用于显示的付款人（预存模式下，如果付款人被修改为保管人，保存原始付款人）
           }
         });
         
         // 如果是预存模式且付款人不是保管人，创建充值记录
+        let relatedRechargeId = null;
         if (needCreateRecharge && originalPayer && this.data.keeper) {
           const dateStr = this.data.date; // 格式：yyyy-MM-dd
           const date = new Date(`${dateStr}T00:00:00`);
           
-          await dbCloud.collection('recharges').add({
+          const rechargeResult = await dbCloud.collection('recharges').add({
             data: {
               activityId: this.data.activityId,
               amount: amount,
@@ -671,7 +833,17 @@ Page({
               recorder: userName, // 记录人（当前用户）
               date: date,
               creator: userName,
-              createdAt: new Date()
+              createdAt: new Date(),
+              isAuto: true // 标记为自动生成的充值记录
+            }
+          });
+          
+          relatedRechargeId = rechargeResult._id;
+          
+          // 更新账单，保存关联的充值记录ID
+          await dbCloud.collection('bills').doc(billResult._id).update({
+            data: {
+              relatedRechargeId: relatedRechargeId
             }
           });
           
@@ -679,7 +851,7 @@ Page({
           wx.hideLoading();
           wx.showModal({
             title: '提示',
-            content: `预存模式下，付款人已自动修改为保管人员（${this.data.keeper}），并已创建充值记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`,
+            content: `预存模式下，付款人和保管人员不同，已经自动创建充值记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`,
             showCancel: false,
             confirmText: '确定',
             success: () => {

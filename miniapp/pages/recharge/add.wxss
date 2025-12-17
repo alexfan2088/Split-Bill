@@ -43,6 +43,11 @@
   align-items: center;
 }
 
+.picker-disabled {
+  background-color: #f5f5f5;
+  color: #999;
+}
+
 .payer-tags {
   display: flex;
   flex-wrap: wrap;
@@ -65,6 +70,12 @@
   background-color: #e7f3ff;
   color: #007bff;
   font-weight: 500;
+}
+
+.payer-tag-disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  opacity: 0.6;
 }
 
 .keeper-display {

@@ -329,7 +329,27 @@ async function deleteActivity(activityId) {
       // 继续删除活动，不因为账单删除失败而中断
     }
     
-    // 2. 删除关联的group
+    // 2. 删除关联的充值记录（预存记录）
+    try {
+      const rechargesRes = await db.collection('recharges')
+        .where({ activityId: activityId })
+        .get();
+      
+      if (rechargesRes.data && rechargesRes.data.length > 0) {
+        console.log(`删除活动 ${activityId} 下的 ${rechargesRes.data.length} 条充值记录`);
+        // 批量删除充值记录
+        const deletePromises = rechargesRes.data.map(recharge => 
+          db.collection('recharges').doc(recharge._id).remove()
+        );
+        await Promise.all(deletePromises);
+        console.log('所有充值记录已删除');
+      }
+    } catch (e) {
+      console.error('删除充值记录失败:', e);
+      // 继续删除活动，不因为充值记录删除失败而中断
+    }
+    
+    // 3. 删除关联的group
     try {
       const groupsRes = await db.collection('groups')
         .where({ activityId: activityId })
@@ -348,7 +368,7 @@ async function deleteActivity(activityId) {
       // 继续删除活动，不因为group删除失败而中断
     }
     
-    // 3. 最后删除活动本身
+    // 4. 最后删除活动本身
     await db.collection('activities').doc(activityId).remove();
     console.log('活动已删除');
     

@@ -283,12 +283,30 @@
   color: #333;
   line-height: 1.3;
   margin-bottom: 4rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.bill-modified-tag {
+  font-size: 20rpx;
+  color: #007bff;
+  font-weight: bold;
 }
 
 .bill-date {
   font-size: 21rpx;
   color: #999;
   line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.bill-original-payer {
+  font-size: 21rpx;
+  color: #007bff;
+  font-weight: 500;
 }
 
 .bill-right {
@@ -803,14 +821,29 @@
   text-align: center;
 }
 
+.recharge-actions {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex: 0 0 auto;
+}
+
+.recharge-item .btn-edit {
+  background-color: #007bff;
+  color: white;
+  font-size: 24rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 4rpx;
+  border: none;
+}
+
 .recharge-item .btn-delete {
-  flex: 0 0 100rpx;
   background-color: #dc3545;
   color: white;
   font-size: 24rpx;
   padding: 8rpx 16rpx;
   border-radius: 4rpx;
-  margin-left: 10rpx;
+  border: none;
 }
 
 .recharge-item .btn-delete.disabled {
