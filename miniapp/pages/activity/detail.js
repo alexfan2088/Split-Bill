@@ -450,11 +450,10 @@ Page({
       app.globalData.currentActivityBalances = balances;
       
       // 等待 DOM 更新后绘制 canvas（在 setData 之后）
-      // 增加延迟时间，确保Canvas完全渲染，特别是预存模式下需要等待更长时间
-      // 使用更长的延迟，确保 Canvas 2D 完全初始化
+      // 使用较短的延迟，drawPieCharts 内部会智能重试
       setTimeout(() => {
         this.drawPieCharts(processedBills);
-      }, 800); // 增加延迟到 800ms
+      }, 200); // 减少延迟到 200ms，内部会智能重试
       
     } catch (e) {
       console.error('加载活动数据失败:', e);
@@ -931,10 +930,10 @@ Page({
     // 如果切换到账单页面，需要重新绘制饼图
     if (tab === 'bills' && this.data.bills && this.data.bills.length > 0) {
       // 延迟绘制，等待DOM更新和 Canvas 2D 初始化
-      // 增加延迟时间，确保 Canvas 完全渲染
+      // 使用较短的延迟，drawPieCharts 内部会智能重试
       setTimeout(() => {
         this.drawPieCharts(this.data.bills);
-      }, 800); // 增加延迟到 800ms，确保 Canvas 2D 完全初始化
+      }, 200); // 减少延迟到 200ms，内部会智能重试
     }
   },
   
@@ -1022,17 +1021,16 @@ Page({
       return pieCircle && pieCircle.sectors && pieCircle.sectors.length > 0;
     });
 
-    for (const bill of pieBills) {
-      const pieCircle = bill.circles.find(c => c.type === 'pie');
-      if (!pieCircle || !pieCircle.sectors) continue;
+    if (pieBills.length === 0) return;
 
-      // 重试机制：最多重试10次，每次间隔300ms
-      // Canvas 2D 需要更多时间初始化，特别是在切换 Tab 时
-      // 第一次查询前先等待一下，确保 Canvas 开始渲染
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
+    // 并行处理所有账单的绘制
+    const drawPromises = pieBills.map(async (bill) => {
+      const pieCircle = bill.circles.find(c => c.type === 'pie');
+      if (!pieCircle || !pieCircle.sectors) return;
+
+      // 获取Canvas节点，使用智能重试机制
       let retryCount = 0;
-      const maxRetries = 10; // 增加重试次数到10次
+      const maxRetries = 8; // 增加重试次数，但使用更短的间隔
       let canvasNode = null;
       
       while (retryCount < maxRetries && !canvasNode) {
@@ -1053,22 +1051,21 @@ Page({
         } catch (e) {
           retryCount++;
           if (retryCount < maxRetries) {
-            // 等待300ms后重试，给 Canvas 2D 更多时间初始化
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // 使用递增的延迟：前几次快速重试，后面逐渐增加
+            const delay = retryCount <= 2 ? 50 : (retryCount <= 4 ? 100 : 150);
+            await new Promise(resolve => setTimeout(resolve, delay));
           } else {
-            console.error(`绘制扇形图失败（已重试${maxRetries}次）:`, e, `bill._id: ${bill._id}`);
-            break; // 重试失败，退出循环
+            console.warn(`无法获取Canvas: pieCanvas_${bill._id}，跳过绘制`);
+            return;
           }
         }
       }
       
       if (!canvasNode) {
-        console.warn(`无法获取Canvas: pieCanvas_${bill._id}，跳过绘制`);
-        continue;
+        return;
       }
 
       try {
-
         const canvas = canvasNode.node;
         const ctx = canvas.getContext('2d');
         const dpr = wx.getSystemInfoSync().pixelRatio;
@@ -1140,9 +1137,12 @@ Page({
           ctx.restore();
         });
       } catch (e) {
-        console.error('绘制扇形图失败:', e);
+        console.error(`绘制扇形图失败（账单 ${bill._id}）:`, e);
       }
-    }
+    });
+
+    // 等待所有绘制完成
+    await Promise.all(drawPromises);
   },
 
   editActivity() {

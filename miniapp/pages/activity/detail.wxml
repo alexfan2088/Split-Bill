@@ -56,7 +56,6 @@
           <view class="bill-info">
             <view class="bill-title">
               {{item.title}}
-              <text wx:if="{{isPrepaid && item.isPayerAutoModified}}" class="bill-modified-tag">改</text>
             </view>
             <view class="bill-date">
               {{item.date}}

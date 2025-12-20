@@ -737,7 +737,7 @@ Page({
             wx.showModal({
               title: '提示',
               content: existingRelatedRechargeId 
-                ? `预存模式下，付款人已修改，已同步更新预存记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`
+                ? `预存模式下，付款人不是保管人员，已同步更新预存记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`
                 : `预存模式下，付款人不是保管人员，已自动创建充值记录：${originalPayer} 向 ${this.data.keeper} 充值 ¥${amount}`,
               showCancel: false,
               confirmText: '确定',
@@ -746,8 +746,14 @@ Page({
                   title: '更新成功',
                   icon: 'success'
                 });
+                // 等待提示显示后返回
+                setTimeout(() => {
+                  wx.navigateBack();
+                }, 1500);
               }
             });
+            // 注意：返回操作在对话框的 success 回调中执行，这里不继续执行后续代码
+            return;
           } else if (existingRelatedRechargeId) {
             // 如果付款人改为保管人，删除关联的预存记录
             // 注意：账单中的 relatedRechargeId 已经在上面更新账单时清除了
@@ -859,8 +865,14 @@ Page({
                 title: '保存成功',
                 icon: 'success'
               });
+              // 等待提示显示后返回
+              setTimeout(() => {
+                wx.navigateBack();
+              }, 1500);
             }
           });
+          // 注意：返回操作在对话框的 success 回调中执行，这里不继续执行后续代码
+          return;
         } else {
           wx.hideLoading();
           wx.showToast({
@@ -870,7 +882,7 @@ Page({
         }
       }
       
-      // 返回上一页
+      // 返回上一页（只有在没有显示对话框的情况下才执行）
       setTimeout(() => {
         wx.navigateBack();
       }, 1500);
