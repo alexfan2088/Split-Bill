@@ -140,7 +140,8 @@
           <view class="member-info">
             <view class="member-name">{{item.name}}</view>
             <view class="member-detail">
-              实付：¥{{item.bal.paid}} | 应付：¥{{item.bal.shouldPay}}
+              <text wx:if="{{isPrepaid && item.isKeeper}}">{{item.name}}收入：¥{{item.bal.shouldPay}} | {{item.name}}支出：¥{{item.bal.paid}}</text>
+              <text wx:else>实付：¥{{item.bal.paid}} | 应付：¥{{item.bal.shouldPay}}</text>
             </view>
           </view>
           <view class="member-balance {{item.bal.balance < 0 ? 'negative' : 'positive'}}">
@@ -189,12 +190,12 @@
             <view wx:if="{{selectedMemberBills.length > 0}}" class="bill-table">
               <view class="bill-table-header">
                 <text class="col-name">名称</text>
-                <text class="col-payer">付款人</text>
+                <text class="col-payer">{{isPrepaid && selectedMemberName === keeper ? '预存人' : '付款人'}}</text>
                 <text class="col-total">总金额</text>
-                <text class="col-user">应付</text>
+                <text class="col-user">{{isPrepaid && selectedMemberName === keeper ? '金额' : '应付'}}</text>
                 <text class="col-date">日期</text>
               </view>
-              <view wx:for="{{selectedMemberBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}">
+              <view wx:for="{{selectedMemberBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}" data-is-recharge="{{item.isRecharge ? 'true' : 'false'}}">
                 <text class="col-name">{{item.title}}</text>
                 <text class="col-payer">{{item.payer}}</text>
                 <text class="col-total">¥{{item.totalAmount}}</text>
@@ -215,7 +216,7 @@
                 <text class="col-total">总金额</text>
                 <text class="col-date">日期</text>
               </view>
-              <view wx:for="{{selectedMemberPaidBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}">
+              <view wx:for="{{selectedMemberPaidBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}" data-is-recharge="{{item.isRecharge ? 'true' : 'false'}}">
                 <text class="col-name">{{item.title}}</text>
                 <text class="col-payee">{{item.payee}}</text>
                 <text class="col-total">¥{{item.totalAmount}}</text>

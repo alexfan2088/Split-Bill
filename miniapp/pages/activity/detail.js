@@ -156,6 +156,7 @@ Page({
           isPayerAutoModified: bill.isPayerAutoModified || false, // 付款人是否被自动修改
           originalPayer: originalPayer, // 原始付款人（如果被自动修改）
           billshow: bill.billshow || null, // 用于显示的付款人（预存模式下，如果付款人被修改为保管人，保存原始付款人）
+          isKeeper: activity.isPrepaid && activity.keeper === bill.payer, // 是否是保管人（用于结算页面显示）
         };
       });
       
@@ -237,6 +238,7 @@ Page({
       // 生成成员列表（带余额），所有金额精确到小数点后2位（格式化为字符串以便显示）
       const members = (activity.members || []).map(m => {
         const bal = balances[m.name] || { paid: 0, shouldPay: 0, balance: 0 };
+        const isKeeper = activity.isPrepaid && activity.keeper === m.name;
         return {
           name: m.name,
           bal: {
@@ -245,7 +247,9 @@ Page({
             balance: this.formatAmount(bal.balance)
           },
           // 保存原始余额值用于排序
-          _balanceValue: bal.balance
+          _balanceValue: bal.balance,
+          // 在预存模式下，标记是否是保管人（用于结算页面显示）
+          isKeeper: isKeeper
         };
       });
       
@@ -739,47 +743,117 @@ Page({
     const rawRecharges = this.data.rawRecharges || [];
     
     // 用户应付的账单列表（该用户参与的账单）
-    const memberBills = rawBills
-      .filter(b => b && b.splitDetail && b.participants && b.participants[memberName] !== undefined && b.participants[memberName] > 0 && b.splitDetail[memberName] !== undefined)
-      .map(b => {
-        // 预存模式下，如果有 billshow 字段，使用它来显示付款人（用于保持账务平衡显示）
-        const displayPayer = (b.billshow || b.payer) || '未知';
-        return {
-          _id: b._id,
-          creator: b.creator,
-          title: b.title || '未命名',
-          payer: displayPayer, // 使用 billshow 或 payer 来显示
-          totalAmount: this.formatAmount(b.amount || 0),
-          userAmount: this.formatAmount(b.splitDetail[memberName] || 0),
-          date: this.formatBillDate(b),
-          paid: displayPayer === memberName, // 付款人为本人视为已付（使用显示付款人）
-        };
-      });
+    // 预存模式下，如果是保管人，收入账单列表应该是充值记录
+    let memberBills = [];
+    if (isPrepaid && memberName === keeper) {
+      // 预存模式下，保管人的收入 = 充值记录
+      memberBills = rawRecharges
+        .filter(r => r.keeper === keeper)
+        .map(r => {
+          return {
+            _id: r._id,
+            creator: r.creator,
+            title: '充值',
+            payer: r.payer || '未知', // 预存人（充值的人）
+            totalAmount: this.formatAmount(r.amount || 0),
+            userAmount: this.formatAmount(r.amount || 0), // 保管人收到的金额
+            date: this.formatRechargeDate(r),
+            paid: true, // 充值记录视为已付
+            isRecharge: true // 标记为充值记录
+          };
+        });
+    } else {
+      // 非预存模式或非保管人，收入 = 参与的账单
+      memberBills = rawBills
+        .filter(b => b && b.splitDetail && b.participants && b.participants[memberName] !== undefined && b.participants[memberName] > 0 && b.splitDetail[memberName] !== undefined)
+        .map(b => {
+          // 预存模式下，如果有 billshow 字段，使用它来显示付款人（用于保持账务平衡显示）
+          const displayPayer = (b.billshow || b.payer) || '未知';
+          return {
+            _id: b._id,
+            creator: b.creator,
+            title: b.title || '未命名',
+            payer: displayPayer, // 使用 billshow 或 payer 来显示
+            totalAmount: this.formatAmount(b.amount || 0),
+            userAmount: this.formatAmount(b.splitDetail[memberName] || 0),
+            date: this.formatBillDate(b),
+            paid: displayPayer === memberName, // 付款人为本人视为已付（使用显示付款人）
+          };
+        });
+    }
     
     // 用户实付的账单列表（该用户付款的账单）
     // 预存模式下，需要检查 billshow 字段，如果 billshow 是当前用户，也应该显示
-    const memberPaidBills = rawBills
-      .filter(b => {
-        // 如果账单的 billshow 是当前用户，或者账单的 payer 是当前用户，都算作实付
-        const displayPayer = (b.billshow || b.payer) || '';
-        return displayPayer === memberName;
-      })
-      .map(b => {
-        // 计算收款人（所有参与人中，除了付款人自己）
-        const participants = b.participants ? Object.keys(b.participants).filter(name => 
-          name !== memberName && b.participants[name] > 0
-        ) : [];
-        const payee = participants.length > 0 ? participants.join('、') : '无';
-        
-        return {
-          _id: b._id,
-          creator: b.creator,
-          title: b.title || '未命名',
-          payee: payee,
-          totalAmount: this.formatAmount(b.amount || 0),
-          date: this.formatBillDate(b),
-        };
-      });
+    let memberPaidBills = [];
+    
+    // 预存模式下，如果是充值人员（非保管人），充值记录应该显示在支出列表中
+    if (isPrepaid && memberName !== keeper) {
+      // 先添加充值记录到支出列表
+      const rechargeBills = rawRecharges
+        .filter(r => r.payer === memberName)
+        .map(r => {
+          return {
+            _id: r._id,
+            creator: r.creator,
+            title: '充值',
+            payee: keeper || '保管人', // 收款人是保管人
+            totalAmount: this.formatAmount(r.amount || 0),
+            date: this.formatRechargeDate(r),
+            isRecharge: true // 标记为充值记录
+          };
+        });
+      
+      // 再添加账单记录
+      const billBills = rawBills
+        .filter(b => {
+          // 如果账单的 billshow 是当前用户，或者账单的 payer 是当前用户，都算作实付
+          const displayPayer = (b.billshow || b.payer) || '';
+          return displayPayer === memberName;
+        })
+        .map(b => {
+          // 计算收款人（所有参与人中，除了付款人自己）
+          const participants = b.participants ? Object.keys(b.participants).filter(name => 
+            name !== memberName && b.participants[name] > 0
+          ) : [];
+          const payee = participants.length > 0 ? participants.join('、') : '无';
+          
+          return {
+            _id: b._id,
+            creator: b.creator,
+            title: b.title || '未命名',
+            payee: payee,
+            totalAmount: this.formatAmount(b.amount || 0),
+            date: this.formatBillDate(b),
+          };
+        });
+      
+      // 合并充值记录和账单记录
+      memberPaidBills = [...rechargeBills, ...billBills];
+    } else {
+      // 非预存模式或保管人，只显示账单
+      memberPaidBills = rawBills
+        .filter(b => {
+          // 如果账单的 billshow 是当前用户，或者账单的 payer 是当前用户，都算作实付
+          const displayPayer = (b.billshow || b.payer) || '';
+          return displayPayer === memberName;
+        })
+        .map(b => {
+          // 计算收款人（所有参与人中，除了付款人自己）
+          const participants = b.participants ? Object.keys(b.participants).filter(name => 
+            name !== memberName && b.participants[name] > 0
+          ) : [];
+          const payee = participants.length > 0 ? participants.join('、') : '无';
+          
+          return {
+            _id: b._id,
+            creator: b.creator,
+            title: b.title || '未命名',
+            payee: payee,
+            totalAmount: this.formatAmount(b.amount || 0),
+            date: this.formatBillDate(b),
+          };
+        });
+    }
     
     // 计算收入总额
     let incomeTotal = 0;
@@ -856,23 +930,32 @@ Page({
   // 从弹窗跳转到原始账单
   openBillFromModal(e) {
     const billId = e.currentTarget.dataset.id;
+    const isRecharge = e.currentTarget.dataset.isRecharge === 'true';
     if (!billId) return;
 
-    const bill = (this.data.rawBills || []).find(b => b._id === billId);
-    if (!bill) {
-      wx.showToast({
-        title: '未找到账单',
-        icon: 'none'
+    if (isRecharge) {
+      // 如果是充值记录，跳转到充值详情页
+      wx.navigateTo({
+        url: `/pages/recharge/add?activityId=${this.data.activityId}&rechargeId=${billId}`
       });
-      return;
+    } else {
+      // 如果是账单，跳转到账单详情页
+      const bill = (this.data.rawBills || []).find(b => b._id === billId);
+      if (!bill) {
+        wx.showToast({
+          title: '未找到账单',
+          icon: 'none'
+        });
+        return;
+      }
+
+      const userName = db.getCurrentUser();
+      const isCreator = bill.creator === userName;
+
+      wx.navigateTo({
+        url: `/pages/bill/edit?activityId=${this.data.activityId}&billId=${bill._id}&readOnly=${!isCreator}`
+      });
     }
-
-    const userName = db.getCurrentUser();
-    const isCreator = bill.creator === userName;
-
-    wx.navigateTo({
-      url: `/pages/bill/edit?activityId=${this.data.activityId}&billId=${bill._id}&readOnly=${!isCreator}`
-    });
   },
 
   // 计算日期范围
