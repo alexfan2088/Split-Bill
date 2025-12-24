@@ -3,11 +3,14 @@
   <view class="header">
     <view class="activity-header">
         <view class="activity-title-row">
-          <view class="activity-title">
+          <view class="activity-title {{isCreator ? 'creator-title' : ''}}">
             {{activity.name}}
             <text wx:if="{{isPrepaid}}" class="prepaid-tag">（预存）</text>
           </view>
-          <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
+          <view class="activity-actions">
+            <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
+            <button wx:if="{{isCreator}}" class="btn-delete-activity" size="mini" bindtap="deleteActivity">删除</button>
+          </view>
         </view>
       <view class="activity-creator" wx:if="{{activity.creator}}">
         <text>创建者：<text class="creator-name">{{activity.creator}}</text></text>
@@ -54,7 +57,7 @@
           </view>
           <view class="bill-weight">{{item.totalCount}}</view>
           <view class="bill-info">
-            <view class="bill-title">
+            <view class="bill-title {{item.isCreator ? 'creator-bill-title' : ''}}">
               {{item.title}}
             </view>
             <view class="bill-date">
@@ -65,7 +68,6 @@
         </view>
         <view class="bill-right">
           <view class="bill-amount">¥{{item.amount}}</view>
-          <button wx:if="{{item.isCreator}}" class="btn-delete" size="mini" catchtap="deleteBill" data-id="{{item._id}}" data-title="{{item.title}}">删除</button>
         </view>
       </view>
     </view>
@@ -215,7 +217,7 @@
                 <text class="col-date">日期</text>
               </view>
               <view wx:for="{{selectedMemberPaidBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}" data-is-recharge="{{item.isRecharge ? 'true' : 'false'}}">
-                <text class="col-name">{{item.title}}</text>
+                <text class="col-name {{item.isCreator ? 'creator-bill-title' : ''}}">{{item.title}}</text>
                 <text class="col-payee">{{item.payee}}</text>
                 <text class="col-total">¥{{item.totalAmount}}</text>
                 <text class="col-date">{{item.date}}</text>

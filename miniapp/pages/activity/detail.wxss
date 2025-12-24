@@ -98,6 +98,18 @@
   font-weight: bold;
 }
 
+.activity-title.creator-title {
+  color: #006400;
+  font-weight: bold;
+}
+
+.activity-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  align-items: flex-end;
+}
+
 .btn-edit-activity {
   background-color: #007bff;
   color: white;
@@ -111,6 +123,15 @@
   background-color: #e0e0e0;
   color: #999;
   opacity: 0.6;
+}
+
+.btn-delete-activity {
+  background-color: #dc3545;
+  color: white;
+  font-size: 24rpx;
+  padding: 8rpx 20rpx;
+  border-radius: 6rpx;
+  margin-left: 20rpx;
 }
 
 .tabs {
@@ -286,6 +307,11 @@
   display: flex;
   align-items: center;
   gap: 8rpx;
+}
+
+.bill-title.creator-bill-title {
+  color: #006400;
+  font-weight: bold;
 }
 
 .bill-modified-tag {

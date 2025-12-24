@@ -8,6 +8,7 @@ Page({
     billId: '',
     isEdit: false,
     isReadOnly: false,
+    isCreator: false, // 是否是账单创建者
     amount: '',
     title: '',
     billType: '聚餐', // 账单类型
@@ -22,6 +23,8 @@ Page({
     payerDisabled: false, // 付款人是否禁用
     defaultTypes: ['聚餐', '人情账', '麻将', '门票', '礼品', '衣服'], // 系统默认类型
     commonTypes: ['聚餐', '人情账', '麻将', '门票', '礼品', '衣服'], // 常用类型（包含系统类型和自定义类型）
+    recentBillTitles: [], // 最近的账单名称列表
+    showTitlePicker: false, // 是否显示账单名称选择器
   },
   
   async onLoad(options) {
@@ -200,19 +203,34 @@ Page({
       const dbCloud = wx.cloud.database();
       const activityId = this.data.activityId;
       
-      // 查询最近一次账单
+      // 查询最近一次账单和最近的账单名称列表
       let lastBill = null;
       let lastBillParticipants = null;
+      let recentBillTitles = [];
       try {
-        const lastBillRes = await dbCloud.collection('bills')
+        // 查询最近的账单（最多5条，用于获取账单名称列表）
+        const recentBillsRes = await dbCloud.collection('bills')
           .where({ activityId: activityId })
           .orderBy('createdAt', 'desc')
-          .limit(1)
+          .limit(5)
           .get();
 
-        if (lastBillRes.data && lastBillRes.data.length > 0) {
-          lastBill = lastBillRes.data[0];
+        if (recentBillsRes.data && recentBillsRes.data.length > 0) {
+          // 获取最近一次账单
+          lastBill = recentBillsRes.data[0];
           lastBillParticipants = lastBill.participants || null;
+          
+          // 提取最近的账单名称列表（去重，保留顺序）
+          const titleSet = new Set();
+          recentBillTitles = recentBillsRes.data
+            .map(bill => bill.title)
+            .filter(title => {
+              if (title && !titleSet.has(title)) {
+                titleSet.add(title);
+                return true;
+              }
+              return false;
+            });
           
           // 继承最近一次账单的名称和类型
           if (lastBill.title) {
@@ -229,6 +247,9 @@ Page({
       } catch (e) {
         console.log('查询最近一次账单失败（可能没有索引）:', e);
       }
+      
+      // 设置最近的账单名称列表
+      this.setData({ recentBillTitles });
       
       // 加载成员列表
       const groupRes = await dbCloud.collection('groups')
@@ -270,6 +291,9 @@ Page({
       // 检查权限
       const userName = db.getCurrentUser();
       const isCreator = bill.creator === userName;
+      
+      // 设置是否是创建者
+      this.setData({ isCreator });
       
       // 如果不是创建者，设置为只读模式
       if (!isCreator && !this.data.isReadOnly) {
@@ -383,6 +407,88 @@ Page({
   
   onAmountInput(e) {
     this.setData({ amount: e.detail.value });
+  },
+  
+  selectTitle(e) {
+    const title = e.currentTarget.dataset.title;
+    if (title) {
+      this.setData({ title: title });
+    }
+  },
+  
+  clearTitle() {
+    this.setData({ title: '' });
+  },
+  
+  deleteBill() {
+    // 只有创建者才能删除账单
+    if (!this.data.isCreator) {
+      wx.showToast({
+        title: '只有创建者可以删除账单',
+        icon: 'none'
+      });
+      return;
+    }
+
+    const billTitle = this.data.title || '该账单';
+    
+    wx.showModal({
+      title: '确认删除',
+      content: `确定要删除账单"${billTitle}"吗？此操作不可恢复！`,
+      success: async (res) => {
+        if (res.confirm) {
+          wx.showLoading({ title: '删除中...' });
+          try {
+            const dbCloud = wx.cloud.database();
+            
+            // 如果是预存模式，先检查账单是否有关联的充值记录
+            if (this.data.isPrepaid) {
+              try {
+                const billDoc = await dbCloud.collection('bills').doc(this.data.billId).get();
+                const bill = billDoc.data;
+                
+                // 如果账单有关联的充值记录ID，删除对应的充值记录
+                if (bill && bill.relatedRechargeId) {
+                  try {
+                    await dbCloud.collection('recharges').doc(bill.relatedRechargeId).remove();
+                    console.log('已同步删除关联的充值记录:', bill.relatedRechargeId);
+                  } catch (rechargeErr) {
+                    console.error('删除关联充值记录失败:', rechargeErr);
+                    // 继续删除账单，不因为充值记录删除失败而阻止
+                  }
+                }
+              } catch (billErr) {
+                console.error('获取账单信息失败:', billErr);
+                // 继续删除账单
+              }
+            }
+            
+            // 删除账单
+            const result = await db.deleteBill(this.data.billId);
+            if (result.success) {
+              wx.hideLoading();
+              wx.showToast({
+                title: '删除成功',
+                icon: 'success'
+              });
+              // 返回上一页
+              setTimeout(() => {
+                wx.navigateBack();
+              }, 1500);
+            } else {
+              throw new Error(result.error);
+            }
+          } catch (e) {
+            wx.hideLoading();
+            console.error('删除账单失败:', e);
+            wx.showToast({
+              title: '删除失败：' + (e.message || '未知错误'),
+              icon: 'none'
+            });
+          }
+        }
+      }
+    });
   },
   
   onTitleInput(e) {

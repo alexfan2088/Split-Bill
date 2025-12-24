@@ -19,6 +19,13 @@
     <view class="form-item">
       <text class="label">账单名称</text>
       <input class="input" type="text" placeholder="例如：晚餐、山姆购物" value="{{title}}" bindinput="onTitleInput" maxlength="20" disabled="{{isReadOnly}}" />
+      <view wx:if="{{!isReadOnly && !isEdit && recentBillTitles.length > 0}}" class="recent-titles">
+        <view class="recent-titles-label">最近账单名称：</view>
+        <view class="recent-titles-buttons">
+          <view wx:for="{{recentBillTitles}}" wx:key="*this" class="btn-title-item" bindtap="selectTitle" data-title="{{item}}">{{item}}</view>
+          <view class="btn-title-clear" bindtap="clearTitle">清空</view>
+        </view>
+      </view>
       <text class="hint">最多20个汉字</text>
     </view>
     
@@ -35,7 +42,10 @@
     <view class="form-item">
       <view class="form-item-header">
         <text class="label">付款人</text>
-        <button wx:if="{{!isReadOnly}}" class="btn btn-save" bindtap="saveBill">{{isEdit ? '更新账单' : '保存账单'}}</button>
+        <view class="form-actions">
+          <button wx:if="{{!isReadOnly}}" class="btn btn-save" bindtap="saveBill">{{isEdit ? '更新账单' : '保存账单'}}</button>
+          <button wx:if="{{isEdit && isCreator && !isReadOnly}}" class="btn btn-delete" bindtap="deleteBill">删除</button>
+        </view>
       </view>
       <picker range="{{payerList}}" range-key="name" value="{{payerIndex}}" bindchange="onPayerChange" disabled="{{isReadOnly || payerDisabled}}">
         <view class="picker {{payerDisabled ? 'picker-disabled' : ''}}">{{payerList[payerIndex] ? payerList[payerIndex].name : '选择付款人'}}</view>

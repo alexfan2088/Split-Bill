@@ -830,9 +830,11 @@ Page({
         .map(b => {
           // 预存模式下，如果有 billshow 字段，使用它来显示付款人（用于保持账务平衡显示）
           const displayPayer = (b.billshow || b.payer) || '未知';
+          const userName = db.getCurrentUser();
           return {
             _id: b._id,
             creator: b.creator,
+            isCreator: b.creator === userName, // 是否是账单创建者
             title: b.title || '未命名',
             payer: displayPayer, // 使用 billshow 或 payer 来显示
             totalAmount: this.formatAmount(b.amount || 0),
@@ -885,10 +887,12 @@ Page({
             name !== memberName && b.participants[name] > 0
           ) : [];
           const payee = participants.length > 0 ? participants.join('、') : '无';
+          const userName = db.getCurrentUser();
           
           return {
             _id: b._id,
             creator: b.creator,
+            isCreator: b.creator === userName, // 是否是账单创建者
             title: b.title || '未命名',
             payee: payee,
             totalAmount: this.formatAmount(b.amount || 0),
@@ -912,10 +916,12 @@ Page({
             name !== memberName && b.participants[name] > 0
           ) : [];
           const payee = participants.length > 0 ? participants.join('、') : '无';
+          const userName = db.getCurrentUser();
           
           return {
             _id: b._id,
             creator: b.creator,
+            isCreator: b.creator === userName, // 是否是账单创建者
             title: b.title || '未命名',
             payee: payee,
             totalAmount: this.formatAmount(b.amount || 0),
@@ -1315,6 +1321,47 @@ Page({
 
     wx.navigateTo({
       url: `/pages/activity/create?id=${this.data.activityId}&data=${encodeURIComponent(JSON.stringify(activityData))}`
+    });
+  },
+  
+  deleteActivity() {
+    // 只有创建者才能删除活动
+    if (!this.data.isCreator) {
+      wx.showToast({
+        title: '只有创建者可以删除活动',
+        icon: 'none'
+      });
+      return;
+    }
+
+    const activityName = this.data.activity.name || '该活动';
+    
+    wx.showModal({
+      title: '确认删除',
+      content: `确定要删除活动"${activityName}"吗？此操作不可恢复！`,
+      success: async (res) => {
+        if (res.confirm) {
+          wx.showLoading({ title: '删除中...' });
+          try {
+            await db.deleteActivity(this.data.activityId);
+            wx.hideLoading();
+            wx.showToast({
+              title: '删除成功',
+              icon: 'success'
+            });
+            // 返回活动列表页面
+            setTimeout(() => {
+              wx.navigateBack();
+            }, 1500);
+          } catch (e) {
+            wx.hideLoading();
+            wx.showToast({
+              title: '删除失败',
+              icon: 'none'
+            });
+          }
+        }
+      }
     });
   },
   

@@ -143,9 +143,70 @@ Page({
         console.log(`准备设置 - 活动 ${act.name} - memberNamesText:`, act.memberNamesText);
       });
       
+      // 查询每个活动的最新账单时间，用于排序（按创建时间或更新时间）
+      const activitiesWithLastBillTime = await Promise.all(newActivities.map(async (act) => {
+        let lastBillTime = null;
+        try {
+          // 先尝试按updatedAt排序查询最新账单
+          let billRes = null;
+          try {
+            billRes = await dbCloud.collection('bills')
+              .where({ activityId: act._id })
+              .orderBy('updatedAt', 'desc')
+              .limit(1)
+              .get();
+          } catch (e) {
+            // 如果updatedAt字段没有索引，尝试按createdAt排序
+            console.log(`按updatedAt查询失败，尝试按createdAt查询:`, e);
+            billRes = await dbCloud.collection('bills')
+              .where({ activityId: act._id })
+              .orderBy('createdAt', 'desc')
+              .limit(1)
+              .get();
+          }
+          
+          if (billRes && billRes.data && billRes.data.length > 0) {
+            const bill = billRes.data[0];
+            // 优先使用账单的updatedAt，如果没有则使用createdAt（不再使用time字段）
+            if (bill.updatedAt) {
+              lastBillTime = bill.updatedAt.getTime ? bill.updatedAt.getTime() : new Date(bill.updatedAt).getTime();
+            } else if (bill.createdAt) {
+              lastBillTime = bill.createdAt.getTime ? bill.createdAt.getTime() : new Date(bill.createdAt).getTime();
+            }
+          }
+        } catch (e) {
+          console.log(`查询活动 ${act.name} 的最新账单失败:`, e);
+          // 如果查询失败，尝试使用活动的更新时间
+          if (act.updatedAt) {
+            lastBillTime = act.updatedAt.getTime ? act.updatedAt.getTime() : new Date(act.updatedAt).getTime();
+          } else if (act.createdAt) {
+            lastBillTime = act.createdAt.getTime ? act.createdAt.getTime() : new Date(act.createdAt).getTime();
+          }
+        }
+        
+        // 如果没有账单，使用活动的创建时间
+        if (!lastBillTime) {
+          if (act.createdAt) {
+            lastBillTime = act.createdAt.getTime ? act.createdAt.getTime() : new Date(act.createdAt).getTime();
+          } else {
+            lastBillTime = 0; // 没有时间信息的活动排到最后
+          }
+        }
+        
+        return {
+          ...act,
+          lastBillTime: lastBillTime
+        };
+      }));
+      
+      // 按照最新账单时间倒序排序（最新的排在最前面）
+      activitiesWithLastBillTime.sort((a, b) => {
+        return (b.lastBillTime || 0) - (a.lastBillTime || 0);
+      });
+      
       // 直接设置数据
       this.setData({ 
-        activities: newActivities 
+        activities: activitiesWithLastBillTime 
       }, () => {
         console.log('数据设置完成，当前活动列表:', this.data.activities);
         this.data.activities.forEach(act => {

@@ -19,11 +19,10 @@
     
     <view wx:for="{{activities}}" wx:key="_id" class="activity-item" bindtap="openActivity" data-id="{{item._id}}" data-is-creator="{{item.isCreator}}">
       <view class="activity-header">
-        <view class="activity-name">
+        <view class="activity-name {{item.isCreator ? 'creator-name' : ''}}">
           {{item.name}}
           <text wx:if="{{item.isPrepaid}}" class="prepaid-tag">（预存）</text>
         </view>
-        <button wx:if="{{item.isCreator}}" class="btn-delete" size="mini" catchtap="deleteActivity" data-id="{{item._id}}" data-name="{{item.name}}">删除</button>
       </view>
       <view class="activity-meta">
         <text wx:if="{{item.type}}">{{item.type}} | </text>

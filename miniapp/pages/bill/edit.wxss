@@ -22,6 +22,12 @@
   margin-bottom: 16rpx;
 }
 
+.form-actions {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+}
+
 .label {
   display: block;
   font-size: 28rpx;
@@ -42,6 +48,52 @@
   border: 2rpx solid #ddd;
   border-radius: 8rpx;
   font-size: 28rpx;
+}
+
+.recent-titles {
+  margin-top: 16rpx;
+}
+
+.recent-titles-label {
+  font-size: 24rpx;
+  color: #666;
+  margin-bottom: 12rpx;
+}
+
+.recent-titles-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  align-items: center;
+}
+
+.btn-title-item {
+  padding: 12rpx 24rpx;
+  border: 2rpx solid #007bff;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  color: #007bff;
+  background-color: white;
+  text-align: center;
+}
+
+.btn-title-item:active {
+  background-color: #e7f3ff;
+  border-color: #0056b3;
+}
+
+.btn-title-clear {
+  padding: 12rpx 24rpx;
+  border: 2rpx solid #999;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  color: #999;
+  background-color: white;
+  text-align: center;
+}
+
+.btn-title-clear:active {
+  background-color: #f0f0f0;
 }
 
 .picker {
@@ -154,6 +206,20 @@
 }
 
 .btn-save::after {
+  border: none;
+}
+
+.btn-delete {
+  background-color: #dc3545;
+  color: white;
+  padding: 16rpx 32rpx;
+  font-size: 26rpx;
+  border-radius: 8rpx;
+  min-width: 100rpx;
+  text-align: center;
+}
+
+.btn-delete::after {
   border: none;
 }
 

@@ -86,6 +86,11 @@
   gap: 8rpx;
 }
 
+.activity-name.creator-name {
+  color: #006400;
+  font-weight: bold;
+}
+
 .prepaid-tag {
   font-size: 28rpx;
   font-weight: bold;
