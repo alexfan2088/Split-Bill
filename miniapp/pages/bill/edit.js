@@ -387,10 +387,10 @@ Page({
   
   onTitleInput(e) {
     const title = e.detail.value;
-    if (title.length > 7) {
+    if (title.length > 20) {
       wx.showModal({
         title: '提示',
-        content: '账单名称不能超过7个汉字，请修改后重试。',
+        content: '账单名称不能超过20个汉字，请修改后重试。',
         showCancel: false,
         confirmText: '确定',
         success: () => {
@@ -462,10 +462,10 @@ Page({
   
   async saveBill() {
     // 验证账单名称长度
-    if (this.data.title.length > 7) {
+    if (this.data.title.length > 20) {
       wx.showModal({
         title: '提示',
-        content: '账单名称不能超过7个汉字，请修改后重试。',
+        content: '账单名称不能超过20个汉字，请修改后重试。',
         showCancel: false,
         confirmText: '确定',
       });

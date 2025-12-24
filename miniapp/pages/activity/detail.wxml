@@ -191,14 +191,12 @@
               <view class="bill-table-header">
                 <text class="col-name">名称</text>
                 <text class="col-payer">{{isPrepaid && selectedMemberName === keeper ? '预存人' : '付款人'}}</text>
-                <text class="col-total">总金额</text>
-                <text class="col-user">{{isPrepaid && selectedMemberName === keeper ? '金额' : '应付'}}</text>
+                <text class="col-user">金额</text>
                 <text class="col-date">日期</text>
               </view>
               <view wx:for="{{selectedMemberBills}}" wx:key="index" class="bill-table-row" bindtap="openBillFromModal" data-id="{{item._id}}" data-is-recharge="{{item.isRecharge ? 'true' : 'false'}}">
                 <text class="col-name">{{item.title}}</text>
                 <text class="col-payer">{{item.payer}}</text>
-                <text class="col-total">¥{{item.totalAmount}}</text>
                 <text class="col-user">¥{{item.userAmount}}</text>
                 <text class="col-date">{{item.date}}</text>
               </view>

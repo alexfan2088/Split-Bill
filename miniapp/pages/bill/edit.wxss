@@ -15,11 +15,17 @@
   margin-bottom: 40rpx;
 }
 
+.form-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
 .label {
   display: block;
   font-size: 28rpx;
   color: #333;
-  margin-bottom: 16rpx;
   font-weight: 500;
 }
 
@@ -126,6 +132,29 @@
   background-color: #e7f3ff;
   color: #007bff;
   font-weight: 500;
+}
+
+.btn {
+  border: none;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+}
+
+.btn-save {
+  background-color: #007bff;
+  color: white;
+  padding: 16rpx 32rpx;
+  font-size: 26rpx;
+  border-radius: 8rpx;
+  min-width: 140rpx;
+  text-align: center;
+}
+
+.btn-save::after {
+  border: none;
 }
 
 

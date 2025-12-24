@@ -72,26 +72,87 @@ Page({
       
       const activityMeta = (activity.type || '') + ' | 成员：' + (activity.members || []).map(m => m.name).join('、');
       
-      // 加载账单列表
-      const billsRes = await dbCloud.collection('bills')
-        .where({ activityId: activityId })
-        .get();
+      // 加载账单列表（小程序云数据库默认限制20条，需要分页查询获取所有数据）
+      let bills = [];
+      const MAX_LIMIT = 20; // 小程序云数据库单次查询最大限制
+      let hasMore = true;
+      let skip = 0;
       
-      let bills = billsRes.data || [];
+      // 尝试使用 time 字段排序，如果失败则使用 createdAt
+      let orderByField = 'time';
+      let useOrderBy = true;
       
-      // 按日期排序（从最近到最远）
-      bills = bills.sort((a, b) => {
-        const getDate = (bill) => {
-          if (bill.time) {
-            return bill.time.getTime ? bill.time.getTime() : new Date(bill.time).getTime();
+      while (hasMore) {
+        try {
+          let billsRes;
+          if (useOrderBy) {
+            // 使用排序查询（skip需要配合orderBy使用）
+            billsRes = await dbCloud.collection('bills')
+              .where({ activityId: activityId })
+              .orderBy(orderByField, 'desc')
+              .skip(skip)
+              .limit(MAX_LIMIT)
+              .get();
+          } else {
+            // 如果不使用排序，直接查询（但只能获取前20条）
+            if (skip === 0) {
+              billsRes = await dbCloud.collection('bills')
+                .where({ activityId: activityId })
+                .get();
+            } else {
+              // 如果skip > 0但没有排序，无法继续查询
+              hasMore = false;
+              break;
+            }
           }
-          if (bill.createdAt) {
-            return bill.createdAt.getTime ? bill.createdAt.getTime() : new Date(bill.createdAt).getTime();
+          
+          const currentBills = billsRes.data || [];
+          bills = bills.concat(currentBills);
+          
+          // 如果返回的数据少于MAX_LIMIT，说明已经获取完所有数据
+          if (currentBills.length < MAX_LIMIT) {
+            hasMore = false;
+          } else {
+            skip += MAX_LIMIT;
           }
-          return 0;
-        };
-        return getDate(b) - getDate(a);
-      });
+        } catch (e) {
+          // 如果排序字段不存在或没有索引，尝试使用createdAt
+          if (useOrderBy && orderByField === 'time') {
+            console.log('time字段排序失败，尝试使用createdAt:', e);
+            orderByField = 'createdAt';
+            skip = 0; // 重置skip，重新开始查询
+            bills = []; // 清空已获取的数据
+            continue;
+          } else if (useOrderBy && orderByField === 'createdAt') {
+            // createdAt也失败，尝试不使用排序（但只能获取前20条）
+            console.log('createdAt字段排序也失败，尝试不使用排序:', e);
+            useOrderBy = false;
+            skip = 0;
+            bills = [];
+            continue;
+          } else {
+            // 所有方式都失败，跳出循环
+            console.error('获取账单列表失败:', e);
+            hasMore = false;
+          }
+        }
+      }
+      
+      // 如果使用了排序，数据已经按时间排序；如果没有使用排序，需要手动排序
+      if (!useOrderBy || bills.length > 0) {
+        bills = bills.sort((a, b) => {
+          const getDate = (bill) => {
+            if (bill.time) {
+              return bill.time.getTime ? bill.time.getTime() : new Date(bill.time).getTime();
+            }
+            if (bill.createdAt) {
+              return bill.createdAt.getTime ? bill.createdAt.getTime() : new Date(bill.createdAt).getTime();
+            }
+            return 0;
+          };
+          return getDate(b) - getDate(a); // 从最近到最远
+        });
+      }
       
       // 处理账单数据，生成圆圈和显示信息
       const userName = db.getCurrentUser();
@@ -804,10 +865,18 @@ Page({
         });
       
       // 再添加账单记录
+      // 注意：在预存模式下，如果账单的付款人不是保管人，系统会创建充值记录
+      // 此时账单的 billshow 是原付款人，但实际付款人是保管人
+      // 为了避免重复显示，如果账单有 relatedRechargeId（说明已创建充值记录），则不显示该账单
       const billBills = rawBills
         .filter(b => {
           // 如果账单的 billshow 是当前用户，或者账单的 payer 是当前用户，都算作实付
           const displayPayer = (b.billshow || b.payer) || '';
+          // 在预存模式下，如果账单有 relatedRechargeId，说明已创建充值记录，不应该再显示账单
+          if (isPrepaid && b.relatedRechargeId) {
+            // 如果账单的 billshow 是当前用户，说明该账单已通过充值记录体现，不显示账单
+            return false;
+          }
           return displayPayer === memberName;
         })
         .map(b => {
