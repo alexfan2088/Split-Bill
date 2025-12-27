@@ -32,7 +32,32 @@ Page({
     selectedMemberBalance: '0.00', // 余额
   },
   
+  onShareAppMessage() {
+    return {
+      title: this.data.activity ? `${this.data.activity.name} - 账单活动` : '账单活动',
+      path: `/pages/activity/detail?id=${this.data.activityId || ''}`,
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
+  onShareTimeline() {
+    return {
+      title: this.data.activity ? `${this.data.activity.name} - 账单活动` : '账单活动',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
   onLoad(options) {
+    // 检查用户是否已登录
+    const userName = db.getCurrentUser();
+    if (!userName) {
+      // 未登录，跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login'
+      });
+      return;
+    }
+    
     if (options.id) {
       this.setData({ activityId: options.id });
       this.loadActivityData();

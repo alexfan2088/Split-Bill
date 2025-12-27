@@ -7,10 +7,7 @@
             {{activity.name}}
             <text wx:if="{{isPrepaid}}" class="prepaid-tag">（预存）</text>
           </view>
-          <view class="activity-actions">
-            <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
-            <button wx:if="{{isCreator}}" class="btn-delete-activity" size="mini" bindtap="deleteActivity">删除</button>
-          </view>
+          <button class="btn-edit-activity {{isCreator ? '' : 'disabled'}}" size="mini" bindtap="editActivity" disabled="{{!isCreator}}">编辑</button>
         </view>
       <view class="activity-creator" wx:if="{{activity.creator}}">
         <text>创建者：<text class="creator-name">{{activity.creator}}</text></text>
@@ -21,9 +18,12 @@
     
     <!-- 结算信息 -->
     <view class="summary-info">
-      <view class="summary-info-item">
-        <text class="summary-label">总支出：</text>
-        <text class="summary-value amount">¥{{total}}</text>
+      <view class="summary-info-item summary-info-row">
+        <view class="summary-info-left">
+          <text class="summary-label">总支出：</text>
+          <text class="summary-value amount">¥{{total}}</text>
+        </view>
+        <button wx:if="{{isCreator}}" class="btn-delete-activity" size="mini" bindtap="deleteActivity">删除</button>
       </view>
       <view class="summary-info-item">
         <text class="summary-label">{{dateRange}} | 账单数量：{{bills.length}} 条</text>

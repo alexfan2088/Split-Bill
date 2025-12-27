@@ -27,7 +27,32 @@ Page({
     showTitlePicker: false, // 是否显示账单名称选择器
   },
   
+  onShareAppMessage() {
+    return {
+      title: this.data.title ? `${this.data.title} - 账单详情` : '账单详情',
+      path: `/pages/bill/edit?activityId=${this.data.activityId || ''}${this.data.billId ? '&billId=' + this.data.billId : ''}`,
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
+  onShareTimeline() {
+    return {
+      title: this.data.title ? `${this.data.title} - 账单详情` : '账单详情',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
   async onLoad(options) {
+    // 检查用户是否已登录
+    const userName = db.getCurrentUser();
+    if (!userName) {
+      // 未登录，跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login'
+      });
+      return;
+    }
+    
     this.setData({ activityId: options.activityId || '' });
     
     // 加载常用账单类型列表（从数据库）

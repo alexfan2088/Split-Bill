@@ -40,12 +40,9 @@
     </view>
     
     <view class="form-item">
-      <view class="form-item-header">
-        <text class="label">付款人</text>
-        <view class="form-actions">
-          <button wx:if="{{!isReadOnly}}" class="btn btn-save" bindtap="saveBill">{{isEdit ? '更新账单' : '保存账单'}}</button>
-          <button wx:if="{{isEdit && isCreator && !isReadOnly}}" class="btn btn-delete" bindtap="deleteBill">删除</button>
-        </view>
+      <view class="form-item-header-inline">
+        <text class="label label-inline">付款人</text>
+        <button wx:if="{{!isReadOnly}}" class="btn btn-save" bindtap="saveBill">{{isEdit ? '更新账单' : '保存账单'}}</button>
       </view>
       <picker range="{{payerList}}" range-key="name" value="{{payerIndex}}" bindchange="onPayerChange" disabled="{{isReadOnly || payerDisabled}}">
         <view class="picker {{payerDisabled ? 'picker-disabled' : ''}}">{{payerList[payerIndex] ? payerList[payerIndex].name : '选择付款人'}}</view>
@@ -73,6 +70,10 @@
     <view class="form-item">
       <text class="label">备注</text>
       <textarea class="textarea" placeholder="可选（最多20个汉字）" value="{{remark}}" bindinput="onRemarkInput" disabled="{{isReadOnly}}" auto-height="{{false}}" maxlength="20" />
+    </view>
+    
+    <view wx:if="{{isEdit && isCreator && !isReadOnly}}" class="form-item form-actions-bottom">
+      <button class="btn btn-delete" bindtap="deleteBill">删除账单</button>
     </view>
   </view>
 </view>

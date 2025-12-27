@@ -8,7 +8,32 @@ Page({
     activities: [],
   },
   
+  onShareAppMessage() {
+    return {
+      title: '账单活动列表',
+      path: '/pages/home/home',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
+  onShareTimeline() {
+    return {
+      title: '账单活动列表',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
   onLoad() {
+    // 检查用户是否已登录
+    const userName = db.getCurrentUser();
+    if (!userName) {
+      // 未登录，跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login'
+      });
+      return;
+    }
+    
     this.loadUserInfo();
     this.loadActivities();
   },

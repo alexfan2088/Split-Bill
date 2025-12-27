@@ -19,6 +19,21 @@ Page({
     hasSavedUser: false, // 是否有保存的用户信息
   },
   
+  onShareAppMessage() {
+    return {
+      title: 'AA 记账 - 登录/注册',
+      path: '/pages/login/login',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
+  onShareTimeline() {
+    return {
+      title: 'AA 记账 - 登录/注册',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
   onLoad() {
     // 检查是否已保存用户信息
     const userName = wx.getStorageSync('aa_user_name');

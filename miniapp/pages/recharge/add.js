@@ -17,7 +17,32 @@ Page({
     currentUser: '', // 当前登录用户（记录人）
   },
 
+  onShareAppMessage() {
+    return {
+      title: '充值记录',
+      path: `/pages/recharge/add?activityId=${this.data.activityId || ''}${this.data.rechargeId ? '&rechargeId=' + this.data.rechargeId : ''}`,
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
+  onShareTimeline() {
+    return {
+      title: '充值记录',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
   onLoad(options) {
+    // 检查用户是否已登录
+    const userName = db.getCurrentUser();
+    if (!userName) {
+      // 未登录，跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login'
+      });
+      return;
+    }
+    
     if (options.activityId) {
       this.setData({ activityId: options.activityId });
       // 获取当前登录用户作为记录人

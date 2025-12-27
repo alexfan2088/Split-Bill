@@ -22,10 +22,42 @@
   margin-bottom: 16rpx;
 }
 
+.form-item-header-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.label-inline {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.form-item-header-inline .btn-save {
+  flex: 1;
+}
+
 .form-actions {
   display: flex;
   gap: 12rpx;
   align-items: center;
+}
+
+.form-actions-bottom {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+}
+
+.form-actions-bottom .btn {
+  flex: 0;
+  width: auto;
+  min-width: 480rpx;
+  padding: 16rpx 32rpx;
 }
 
 .label {
@@ -198,11 +230,14 @@
 .btn-save {
   background-color: #007bff;
   color: white;
-  padding: 16rpx 32rpx;
+  padding: 16rpx 0;
   font-size: 26rpx;
   border-radius: 8rpx;
-  min-width: 140rpx;
+  flex: 1;
   text-align: center;
+  box-sizing: border-box;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .btn-save::after {
@@ -215,8 +250,10 @@
   padding: 16rpx 32rpx;
   font-size: 26rpx;
   border-radius: 8rpx;
-  min-width: 100rpx;
   text-align: center;
+  box-sizing: border-box;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .btn-delete::after {

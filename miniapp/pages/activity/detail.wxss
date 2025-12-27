@@ -84,6 +84,23 @@
   margin-bottom: 0;
 }
 
+.summary-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-info-left {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.summary-info-row .btn-delete-activity {
+  margin-right: 0;
+  flex-shrink: 0;
+}
+
 .summary-label {
   color: #666;
 }
@@ -117,6 +134,7 @@
   padding: 8rpx 20rpx;
   border-radius: 6rpx;
   margin-left: 20rpx;
+  margin-right: 0;
 }
 
 .btn-edit-activity.disabled {
@@ -132,6 +150,7 @@
   padding: 8rpx 20rpx;
   border-radius: 6rpx;
   margin-left: 20rpx;
+  margin-right: 0;
 }
 
 .tabs {

@@ -22,9 +22,33 @@ Page({
     formattedRemark: [], // 格式化后的备注内容（用于显示高亮）
   },
   
+  onShareAppMessage() {
+    return {
+      title: '创建账单活动',
+      path: '/pages/activity/create',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
+  onShareTimeline() {
+    return {
+      title: '创建账单活动',
+      imageUrl: '' // 可选：分享图片
+    };
+  },
+  
   async onLoad(options) {
-    // 获取当前用户（创建者）
+    // 检查用户是否已登录
     const userName = db.getCurrentUser();
+    if (!userName) {
+      // 未登录，跳转到登录页
+      wx.redirectTo({
+        url: '/pages/login/login'
+      });
+      return;
+    }
+    
+    // 获取当前用户（创建者）
     this.setData({ creator: userName });
     
     // 加载常用类型列表（从数据库）
