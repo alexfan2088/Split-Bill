@@ -92,6 +92,32 @@
   margin-bottom: 12rpx;
 }
 
+.title-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.input-title {
+  flex: 1;
+}
+
+.btn-title-clear-inline {
+  padding: 12rpx 24rpx;
+  border: 2rpx solid #999;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  color: #999;
+  background-color: white;
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-title-clear-inline:active {
+  background-color: #f0f0f0;
+}
+
 .recent-titles-buttons {
   display: flex;
   flex-wrap: wrap;

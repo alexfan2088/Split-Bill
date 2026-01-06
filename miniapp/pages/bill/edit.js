@@ -88,8 +88,12 @@ Page({
   async loadCommonTypes() {
     try {
       const dbCloud = wx.cloud.database();
-      // 查询当前用户的自定义账单类型
+      const userName = db.getCurrentUser();
+      // 查询当前用户的自定义账单类型（只加载当前用户创建的）
       const res = await dbCloud.collection('userCustomBillTypes')
+        .where({
+          creator: userName
+        })
         .orderBy('createdAt', 'desc')
         .get();
       
@@ -110,9 +114,13 @@ Page({
   async saveCustomTypeToDB(newType) {
     try {
       const dbCloud = wx.cloud.database();
-      // 检查该类型是否已存在
+      const userName = db.getCurrentUser();
+      // 检查该类型是否已存在（只检查当前用户创建的）
       const checkRes = await dbCloud.collection('userCustomBillTypes')
-        .where({ type: newType })
+        .where({
+          type: newType,
+          creator: userName
+        })
         .get();
       
       if (checkRes.data && checkRes.data.length > 0) {
@@ -120,10 +128,11 @@ Page({
         return;
       }
       
-      // 保存新类型到数据库
+      // 保存新类型到数据库，包含创建者信息
       await dbCloud.collection('userCustomBillTypes').add({
         data: {
           type: newType,
+          creator: userName,
           createdAt: new Date()
         }
       });
@@ -537,6 +546,72 @@ Page({
   selectBillType(e) {
     const selectedType = e.currentTarget.dataset.type;
     this.setData({ billType: selectedType });
+  },
+  
+  // 长按删除自定义类型
+  async deleteType(e) {
+    const typeToDelete = e.currentTarget.dataset.type;
+    const defaultTypes = this.data.defaultTypes;
+    
+    // 检查是否是系统默认类型
+    if (defaultTypes.includes(typeToDelete)) {
+      wx.showToast({
+        title: '系统类型不可删除',
+        icon: 'none',
+        duration: 2000
+      });
+      return;
+    }
+    
+    // 确认删除
+    wx.showModal({
+      title: '确认删除',
+      content: `确定要删除类型"${typeToDelete}"吗？`,
+      success: async (res) => {
+        if (res.confirm) {
+          // 从数据库删除（只删除当前用户创建的）
+          try {
+            const dbCloud = wx.cloud.database();
+            const userName = db.getCurrentUser();
+            const deleteRes = await dbCloud.collection('userCustomBillTypes')
+              .where({
+                type: typeToDelete,
+                creator: userName
+              })
+              .get();
+            
+            if (deleteRes.data && deleteRes.data.length > 0) {
+              // 删除所有匹配的文档（理论上每个用户每种类型只有一个）
+              for (const doc of deleteRes.data) {
+                await dbCloud.collection('userCustomBillTypes').doc(doc._id).remove();
+              }
+            }
+          } catch (e) {
+            console.error('从数据库删除类型失败:', e);
+            wx.showToast({
+              title: '删除失败',
+              icon: 'none'
+            });
+            return;
+          }
+          
+          // 从常用类型列表中删除
+          const updatedTypes = this.data.commonTypes.filter(type => type !== typeToDelete);
+          this.setData({ commonTypes: updatedTypes });
+          
+          // 如果当前选中的类型被删除，清空输入框
+          if (this.data.billType === typeToDelete) {
+            this.setData({ billType: '' });
+          }
+          
+          wx.showToast({
+            title: '已删除',
+            icon: 'success',
+            duration: 1500
+          });
+        }
+      }
+    });
   },
   
   // 账单类型输入框失去焦点时，如果输入了新类型，自动添加到常用类型
